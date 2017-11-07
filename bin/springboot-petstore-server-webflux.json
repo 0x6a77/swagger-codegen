@@ -1,0 +1,5 @@
+{
+    "artifactId": "spring-boot-webflux",
+    "library": "spring-boot-webflux",
+    "useBeanValidation": false
+}

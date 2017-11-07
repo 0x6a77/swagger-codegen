@@ -29,7 +29,7 @@ public class SpringCodegen extends AbstractJavaCodegen implements BeanValidation
 	public static final String	USE_TAGS				= "useTags";
 	public static final String	SPRING_MVC_LIBRARY		= "spring-mvc";
 	public static final String	SPRING_CLOUD_LIBRARY	= "spring-cloud";
-	public static final String	SPRING_REACTOR_LIBRARY	= "spring-boot-reactor";
+	public static final String	SPRING_WEBFLUX_LIBRARY	= "spring-boot-webflux";
 	public static final String	IMPLICIT_HEADERS		= "implicitHeaders";
 	public static final String	SWAGGER_DOCKET_CONFIG	= "swaggerDocketConfig";
 
@@ -86,7 +86,7 @@ public class SpringCodegen extends AbstractJavaCodegen implements BeanValidation
 		supportedLibraries.put(DEFAULT_LIBRARY, "Spring-boot Server application using the SpringFox integration.");
 		supportedLibraries.put(SPRING_MVC_LIBRARY, "Spring-MVC Server application using the SpringFox integration.");
 		supportedLibraries.put(SPRING_CLOUD_LIBRARY, "Spring-Cloud-Feign client with Spring-Boot auto-configured settings.");
-		supportedLibraries.put(SPRING_REACTOR_LIBRARY, "Spring-Boot-Reactor Server with Spring-Boot auto-configured settings.");
+		supportedLibraries.put(SPRING_WEBFLUX_LIBRARY, "Spring-Boot-Webflux Server with Spring-Boot auto-configured settings.");
 		setLibrary(DEFAULT_LIBRARY);
 
 		CliOption library = new CliOption(CodegenConstants.LIBRARY, "library template (sub-template) to use");
@@ -230,8 +230,7 @@ public class SpringCodegen extends AbstractJavaCodegen implements BeanValidation
 				supportingFiles.add(new SupportingFile("application.mustache",
 					("src.main.resources").replace(".", java.io.File.separator),
 					"application.properties"));
-			}
-			if (library.equals(SPRING_MVC_LIBRARY)) {
+			} else if (library.equals(SPRING_MVC_LIBRARY)) {
 				supportingFiles.add(new SupportingFile("webApplication.mustache",
 					(sourceFolder + File.separator + configPackage).replace(".", java.io.File.separator),
 					"WebApplication.java"));
@@ -247,8 +246,7 @@ public class SpringCodegen extends AbstractJavaCodegen implements BeanValidation
 				supportingFiles.add(new SupportingFile("application.properties",
 					("src.main.resources").replace(".", java.io.File.separator),
 					"swagger.properties"));
-			}
-			if (library.equals(SPRING_REACTOR_LIBRARY)) {
+			} else if (library.equals(SPRING_WEBFLUX_LIBRARY)) {
 				supportingFiles.add(new SupportingFile("build.gradle.mustache", "", "build.gradle"));
 				supportingFiles.add(new SupportingFile("gradlew.mustache", "", "gradlew"));
 				supportingFiles.add(new SupportingFile("gradlew.bat.mustache", "", "gradlew.bat"));
@@ -270,8 +268,7 @@ public class SpringCodegen extends AbstractJavaCodegen implements BeanValidation
 				supportingFiles.add(new SupportingFile("application.mustache",
 					("src.main.resources").replace(".", java.io.File.separator),
 					"application.properties"));
-			}
-			if (library.equals(SPRING_CLOUD_LIBRARY)) {
+			} else if (library.equals(SPRING_CLOUD_LIBRARY)) {
 				supportingFiles.add(new SupportingFile("apiKeyRequestInterceptor.mustache",
 					(sourceFolder + File.separator + configPackage).replace(".", java.io.File.separator),
 					"ApiKeyRequestInterceptor.java"));

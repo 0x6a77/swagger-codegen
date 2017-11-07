@@ -1,5 +1,0 @@
-{
-    "artifactId": "spring-boot-reactor",
-    "library": "spring-boot-reactor",
-    "useBeanValidation": false
-}

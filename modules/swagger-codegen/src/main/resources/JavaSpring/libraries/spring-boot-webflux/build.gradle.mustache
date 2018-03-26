@@ -10,8 +10,8 @@ version = '{{artifactVersion}}'
 
 description = """spring-boot-webflux"""
 
-sourceCompatibility = 1.5
-targetCompatibility = 1.5
+sourceCompatibility = 1.8
+targetCompatibility = 1.8
 
 repositories {
      jcenter()
@@ -46,7 +46,7 @@ repositories {
 }
 
 dependencies {
-    compile group: 'org.springframework.boot', name: 'spring-boot-starter-web', version:'2.0.0.M5'
+    compile group: 'org.springframework.boot', name: 'spring-boot-starter-reactor-netty', version:'2.0.0.M5'
     compile group: 'io.springfox', name: 'springfox-swagger2', version:'2.7.0'
     compile group: 'io.springfox', name: 'springfox-swagger-ui', version:'2.7.0'
     compile group: 'com.github.joschi.jackson', name: 'jackson-datatype-threetenbp', version:'2.6.4'

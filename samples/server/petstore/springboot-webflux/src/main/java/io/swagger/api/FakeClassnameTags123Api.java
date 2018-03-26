@@ -8,6 +8,7 @@ package io.swagger.api;
 import io.swagger.model.Client;
 
 import io.swagger.annotations.*;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -33,6 +34,9 @@ public interface FakeClassnameTags123Api {
         produces = { "application/json" }, 
         consumes = { "application/json" },
         method = RequestMethod.PATCH)
-    ResponseEntity<Client> testClassname(@ApiParam(value = "client model" ,required=true )   @RequestBody Client body, @RequestHeader(value = "Accept", required = false) String accept) throws Exception;
+    default ResponseEntity<Client> testClassname(@ApiParam(value = "client model" ,required=true )   @RequestBody Client body, @RequestHeader(value = "Accept", required = false) String accept) throws Exception {
+        // do some magic!
+        return new ResponseEntity<Client>(HttpStatus.OK);
+    }
 
 }

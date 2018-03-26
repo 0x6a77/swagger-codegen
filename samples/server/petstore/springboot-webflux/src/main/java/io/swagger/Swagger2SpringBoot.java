@@ -10,7 +10,6 @@ import springfox.documentation.swagger2.annotations.EnableSwagger2;
 
 @SpringBootApplication
 @EnableSwagger2
-@EnableWebFluxSecurity
 @ComponentScan(basePackages = { "io.swagger", "io.swagger.api" })
 public class Swagger2SpringBoot implements CommandLineRunner {
 

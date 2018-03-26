@@ -1,5 +1,8 @@
 {
     "artifactId": "spring-boot-webflux",
     "library": "spring-boot-webflux",
-    "useBeanValidation": false
+    "useBeanValidation": false,
+    "delegatePattern": false,
+    "java8": true,
+    "dateLibrary": "java8"
 }

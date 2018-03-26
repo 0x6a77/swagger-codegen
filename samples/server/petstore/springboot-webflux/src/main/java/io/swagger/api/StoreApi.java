@@ -9,6 +9,7 @@ import java.util.Map;
 import io.swagger.model.Order;
 
 import io.swagger.annotations.*;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -32,7 +33,10 @@ public interface StoreApi {
     @RequestMapping(value = "/store/order/{order_id}",
         produces = { "application/xml", "application/json" }, 
         method = RequestMethod.DELETE)
-    ResponseEntity<Void> deleteOrder(@ApiParam(value = "ID of the order that needs to be deleted",required=true ) @PathVariable("order_id") String orderId, @RequestHeader(value = "Accept", required = false) String accept) throws Exception;
+    default ResponseEntity<Void> deleteOrder(@ApiParam(value = "ID of the order that needs to be deleted",required=true ) @PathVariable("order_id") String orderId, @RequestHeader(value = "Accept", required = false) String accept) throws Exception {
+        // do some magic!
+        return new ResponseEntity<Void>(HttpStatus.OK);
+    }
 
 
     @ApiOperation(value = "Returns pet inventories by status", notes = "Returns a map of status codes to quantities", response = Integer.class, responseContainer = "Map", authorizations = {
@@ -43,7 +47,10 @@ public interface StoreApi {
     @RequestMapping(value = "/store/inventory",
         produces = { "application/json" }, 
         method = RequestMethod.GET)
-    ResponseEntity<Map<String, Integer>> getInventory( @RequestHeader(value = "Accept", required = false) String accept) throws Exception;
+    default ResponseEntity<Map<String, Integer>> getInventory( @RequestHeader(value = "Accept", required = false) String accept) throws Exception {
+        // do some magic!
+        return new ResponseEntity<Map<String, Integer>>(HttpStatus.OK);
+    }
 
 
     @ApiOperation(value = "Find purchase order by ID", notes = "For valid response try integer IDs with value <= 5 or > 10. Other values will generated exceptions", response = Order.class, tags={ "store", })
@@ -54,7 +61,10 @@ public interface StoreApi {
     @RequestMapping(value = "/store/order/{order_id}",
         produces = { "application/xml", "application/json" }, 
         method = RequestMethod.GET)
-    ResponseEntity<Order> getOrderById(@ApiParam(value = "ID of pet that needs to be fetched",required=true ) @PathVariable("order_id") Long orderId, @RequestHeader(value = "Accept", required = false) String accept) throws Exception;
+    default ResponseEntity<Order> getOrderById(@ApiParam(value = "ID of pet that needs to be fetched",required=true ) @PathVariable("order_id") Long orderId, @RequestHeader(value = "Accept", required = false) String accept) throws Exception {
+        // do some magic!
+        return new ResponseEntity<Order>(HttpStatus.OK);
+    }
 
 
     @ApiOperation(value = "Place an order for a pet", notes = "", response = Order.class, tags={ "store", })
@@ -64,6 +74,9 @@ public interface StoreApi {
     @RequestMapping(value = "/store/order",
         produces = { "application/xml", "application/json" }, 
         method = RequestMethod.POST)
-    ResponseEntity<Order> placeOrder(@ApiParam(value = "order placed for purchasing the pet" ,required=true )   @RequestBody Order body, @RequestHeader(value = "Accept", required = false) String accept) throws Exception;
+    default ResponseEntity<Order> placeOrder(@ApiParam(value = "order placed for purchasing the pet" ,required=true )   @RequestBody Order body, @RequestHeader(value = "Accept", required = false) String accept) throws Exception {
+        // do some magic!
+        return new ResponseEntity<Order>(HttpStatus.OK);
+    }
 
 }

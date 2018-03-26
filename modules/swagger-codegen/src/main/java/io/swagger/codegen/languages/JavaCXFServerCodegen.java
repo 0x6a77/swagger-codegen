@@ -1,10 +1,10 @@
-
 package io.swagger.codegen.languages;
 
 import java.io.File;
 import java.util.List;
 import java.util.Map;
 
+import io.swagger.v3.oas.models.Operation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,8 +17,12 @@ import io.swagger.codegen.languages.features.CXFServerFeatures;
 import io.swagger.codegen.languages.features.GzipTestFeatures;
 import io.swagger.codegen.languages.features.LoggingTestFeatures;
 import io.swagger.codegen.languages.features.UseGenericResponseFeatures;
-import io.swagger.models.Operation;
 
+/**
+ * new version of this class can be found on: https://github.com/swagger-api/swagger-codegen-generators
+ * @deprecated use <code>io.swagger.codegen.languages.java.JavaCXFServerCodegen</code> instead.
+ */
+@Deprecated
 public class JavaCXFServerCodegen extends AbstractJavaJAXRSServerCodegen
         implements CXFServerFeatures, GzipTestFeatures, LoggingTestFeatures, UseGenericResponseFeatures
 {

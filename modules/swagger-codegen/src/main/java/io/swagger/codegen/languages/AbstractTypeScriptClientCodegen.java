@@ -1,5 +1,21 @@
 package io.swagger.codegen.languages;
 
+import io.swagger.codegen.CliOption;
+import io.swagger.codegen.CodegenConfig;
+import io.swagger.codegen.CodegenConstants;
+import io.swagger.codegen.CodegenModel;
+import io.swagger.codegen.CodegenProperty;
+import io.swagger.codegen.CodegenType;
+import io.swagger.codegen.DefaultCodegen;
+import io.swagger.v3.oas.models.media.ArraySchema;
+import io.swagger.v3.oas.models.media.BooleanSchema;
+import io.swagger.v3.oas.models.media.DateSchema;
+import io.swagger.v3.oas.models.media.DateTimeSchema;
+import io.swagger.v3.oas.models.media.IntegerSchema;
+import io.swagger.v3.oas.models.media.MapSchema;
+import io.swagger.v3.oas.models.media.NumberSchema;
+import io.swagger.v3.oas.models.media.Schema;
+import io.swagger.v3.oas.models.media.StringSchema;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
@@ -10,19 +26,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
 
-import io.swagger.codegen.CliOption;
-import io.swagger.codegen.CodegenConfig;
-import io.swagger.codegen.CodegenConstants;
-import io.swagger.codegen.CodegenModel;
-import io.swagger.codegen.CodegenProperty;
-import io.swagger.codegen.CodegenType;
-import io.swagger.codegen.DefaultCodegen;
-import io.swagger.models.properties.ArrayProperty;
-import io.swagger.models.properties.FileProperty;
-import io.swagger.models.properties.MapProperty;
-import io.swagger.models.properties.Property;
+import static io.swagger.codegen.CodegenConstants.IS_ENUM_EXT_NAME;
+import static io.swagger.codegen.languages.helpers.ExtensionHelper.getBooleanValue;
 
 public abstract class AbstractTypeScriptClientCodegen extends DefaultCodegen implements CodegenConfig {
+    private static final String UNDEFINED_VALUE = "undefined";
 
     protected String modelPropertyNaming= "camelCase";
     protected Boolean supportsES6 = true;
@@ -138,28 +146,32 @@ public abstract class AbstractTypeScriptClientCodegen extends DefaultCodegen imp
 
     @Override
     public String toParamName(String name) {
-        // replace - with _ e.g. created-at => created_at
-        name = name.replaceAll("-", "_"); // FIXME: a parameter should not be assigned. Also declare the methods parameters as 'final'.
-
-        // if it's all uppper case, do nothing
-        if (name.matches("^[A-Z_]*$"))
-            return name;
-
-        // camelize the variable name
-        // pet_id => petId
-        name = camelize(name, true);
-
-        // for reserved word or word starting with number, append _
-        if (isReservedWord(name) || name.matches("^\\d.*"))
-            name = escapeReservedWord(name);
-
-        return name;
+        // should be the same as variable name
+        return toVarName(name);
     }
 
     @Override
     public String toVarName(String name) {
-        // should be the same as variable name
-        return getNameUsingModelPropertyNaming(name);
+        // sanitize name
+        name = sanitizeName(name);
+
+        if("_".equals(name)) {
+            name = "_u";
+        }
+
+        // if it's all uppper case, do nothing
+        if (name.matches("^[A-Z_]*$")) {
+            return name;
+        }
+
+        name = getNameUsingModelPropertyNaming(name);
+
+        // for reserved word or word starting with number, append _
+        if (isReservedWord(name) || name.matches("^\\d.*")) {
+            name = escapeReservedWord(name);
+        }
+
+        return name;
     }
 
     @Override
@@ -206,24 +218,51 @@ public abstract class AbstractTypeScriptClientCodegen extends DefaultCodegen imp
     }
 
     @Override
-    public String getTypeDeclaration(Property p) {
-        if (p instanceof ArrayProperty) {
-            ArrayProperty ap = (ArrayProperty) p;
-            Property inner = ap.getItems();
-            return getSwaggerType(p) + "<" + getTypeDeclaration(inner) + ">";
-        } else if (p instanceof MapProperty) {
-            MapProperty mp = (MapProperty) p;
-            Property inner = mp.getAdditionalProperties();
-            return "{ [key: string]: "+ getTypeDeclaration(inner) + "; }";
-        } else if (p instanceof FileProperty) {
-            return "any";
+    public String getTypeDeclaration(Schema propertySchema) {
+        if (propertySchema instanceof ArraySchema) {
+            Schema inner = ((ArraySchema) propertySchema).getItems();
+            return String.format("%s<%s>", getSchemaType(propertySchema), getTypeDeclaration(inner));
+        } else if (propertySchema instanceof MapSchema && hasSchemaProperties(propertySchema)) {
+            Schema inner = (Schema) propertySchema.getAdditionalProperties();
+            return String.format("{ [key, string]: %s;}", getTypeDeclaration(inner));
         }
-        return super.getTypeDeclaration(p);
+        return super.getTypeDeclaration(propertySchema);
     }
 
     @Override
-    public String getSwaggerType(Property p) {
-        String swaggerType = super.getSwaggerType(p);
+    public String toDefaultValue(Schema propertySchema) {
+        if (propertySchema instanceof StringSchema) {
+            StringSchema sp = (StringSchema) propertySchema;
+            if (sp.getDefault() != null) {
+                return "\"" + sp.getDefault() + "\"";
+            }
+            return UNDEFINED_VALUE;
+        } else if (propertySchema instanceof BooleanSchema) {
+            return UNDEFINED_VALUE;
+        } else if (propertySchema instanceof DateSchema) {
+            return UNDEFINED_VALUE;
+        } else if (propertySchema instanceof DateTimeSchema) {
+            return UNDEFINED_VALUE;
+        } else if (propertySchema instanceof NumberSchema) {
+            NumberSchema dp = (NumberSchema) propertySchema;
+            if (dp.getDefault() != null) {
+                return dp.getDefault().toString();
+            }
+            return UNDEFINED_VALUE;
+        } else if (propertySchema instanceof IntegerSchema) {
+            IntegerSchema ip = (IntegerSchema) propertySchema;
+            if (ip.getDefault() != null) {
+                return ip.getDefault().toString();
+            }
+            return UNDEFINED_VALUE;
+        } else {
+            return UNDEFINED_VALUE;
+        }
+    }
+
+    @Override
+    public String getSchemaType(Schema schema) {
+        String swaggerType = super.getSchemaType(schema);
         String type = null;
         if (typeMapping.containsKey(swaggerType)) {
             type = typeMapping.get(swaggerType);
@@ -350,7 +389,8 @@ public abstract class AbstractTypeScriptClientCodegen extends DefaultCodegen imp
             cm.imports = new TreeSet(cm.imports);
             for (CodegenProperty var : cm.vars) {
                 // name enum with model name, e.g. StatuEnum => Pet.StatusEnum
-                if (Boolean.TRUE.equals(var.isEnum)) {
+                boolean isEnum = getBooleanValue(var, IS_ENUM_EXT_NAME);
+                if (Boolean.TRUE.equals(isEnum)) {
                     var.datatypeWithEnum = var.datatypeWithEnum.replace(var.enumName, cm.classname + "." + var.enumName);
                 }
             }

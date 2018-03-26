@@ -1,8 +1,12 @@
 package io.swagger.codegen.languages;
 
-import io.swagger.codegen.*;
-import io.swagger.models.Swagger;
-import io.swagger.util.Yaml;
+import io.swagger.codegen.CliOption;
+import io.swagger.codegen.CodegenConfig;
+import io.swagger.codegen.CodegenType;
+import io.swagger.codegen.DefaultCodegen;
+import io.swagger.codegen.SupportingFile;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.core.util.Yaml;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,9 +55,9 @@ public class SwaggerYamlGenerator extends DefaultCodegen implements CodegenConfi
     }
 
     @Override
-    public void processSwagger(Swagger swagger) {
+    public void processOpenAPI(OpenAPI openAPI) {
         try {
-            String swaggerString = Yaml.mapper().writeValueAsString(swagger);
+            String swaggerString = Yaml.mapper().writeValueAsString(openAPI);
             String outputFile = outputFolder + File.separator + this.outputFile;
             FileUtils.writeStringToFile(new File(outputFile), swaggerString);
             LOGGER.debug("wrote file to " + outputFile);

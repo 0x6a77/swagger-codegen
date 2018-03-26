@@ -11,12 +11,6 @@ import io.swagger.codegen.CodegenResponse;
 import io.swagger.codegen.CodegenType;
 import io.swagger.codegen.DefaultCodegen;
 import io.swagger.codegen.SupportingFile;
-import io.swagger.models.Info;
-import io.swagger.models.Model;
-import io.swagger.models.Swagger;
-import io.swagger.models.properties.ArrayProperty;
-import io.swagger.models.properties.MapProperty;
-import io.swagger.models.properties.Property;
 import io.swagger.codegen.utils.Markdown;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -27,7 +21,17 @@ import com.samskivert.mustache.Escapers;
 import com.samskivert.mustache.Mustache.Compiler;
 
 import io.swagger.codegen.utils.Markdown;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.media.ArraySchema;
+import io.swagger.v3.oas.models.media.MapSchema;
+import io.swagger.v3.oas.models.media.Schema;
 
+/**
+ * new version of this class can be found on: https://github.com/swagger-api/swagger-codegen-generators
+ * @deprecated use <code>io.swagger.codegen.languages.html.StaticHtmlCodegen</code> instead.
+ */
+@Deprecated
 public class StaticHtmlGenerator extends DefaultCodegen implements CodegenConfig {
     protected String invokerPackage = "io.swagger.client";
     protected String groupId = "io.swagger";
@@ -98,18 +102,15 @@ public class StaticHtmlGenerator extends DefaultCodegen implements CodegenConfig
     }
 
     @Override
-    public String getTypeDeclaration(Property p) {
-        if (p instanceof ArrayProperty) {
-            ArrayProperty ap = (ArrayProperty) p;
-            Property inner = ap.getItems();
-            return getSwaggerType(p) + "[" + getTypeDeclaration(inner) + "]";
-        } else if (p instanceof MapProperty) {
-            MapProperty mp = (MapProperty) p;
-            Property inner = mp.getAdditionalProperties();
-
-            return getSwaggerType(p) + "[String, " + getTypeDeclaration(inner) + "]";
+    public String getTypeDeclaration(Schema propertySchema) {
+        if (propertySchema instanceof ArraySchema) {
+            Schema inner = ((ArraySchema) propertySchema).getItems();
+            return String.format("%s[%s]", getSchemaType(propertySchema), getTypeDeclaration(inner));
+        } else if (propertySchema instanceof MapSchema && hasSchemaProperties(propertySchema)) {
+            Schema inner = (Schema) propertySchema.getAdditionalProperties();
+            return String.format("%s[String, %s]", getSchemaType(propertySchema), getTypeDeclaration(inner));
         }
-        return super.getTypeDeclaration(p);
+        return super.getTypeDeclaration(propertySchema);
     }
 
 @Override
@@ -178,14 +179,17 @@ public class StaticHtmlGenerator extends DefaultCodegen implements CodegenConfig
         return name;
     }
 
-    public void preprocessSwagger(Swagger swagger) {
-        Info info = swagger.getInfo();
+    public void preprocessOpenAPI(OpenAPI openAPI) {
+        Info info = openAPI.getInfo();
         info.setDescription(toHtml(info.getDescription()));
         info.setTitle(toHtml(info.getTitle()));
-        Map<String, Model> models = swagger.getDefinitions();
-        for (Model model : models.values()) {
-            model.setDescription(toHtml(model.getDescription()));
-            model.setTitle(toHtml(model.getTitle()));
+        if(openAPI.getComponents() == null || openAPI.getComponents().getSchemas() == null) {
+            return;
+        }
+        Map<String, Schema> schemas = openAPI.getComponents().getSchemas();
+        for (Schema schema : schemas.values()) {
+            schema.setDescription(toHtml(schema.getDescription()));
+            schema.setTitle(toHtml(schema.getTitle()));
         }
     }
 

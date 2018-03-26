@@ -1,10 +1,16 @@
 package io.swagger.codegen.languages;
 
+import static io.swagger.codegen.CodegenConstants.IS_ENUM_EXT_NAME;
+import static io.swagger.codegen.languages.helpers.ExtensionHelper.getBooleanValue;
+import static java.util.Collections.sort;
+
+import com.github.jknack.handlebars.internal.path.ThisPath;
 import com.google.common.collect.LinkedListMultimap;
 import io.swagger.codegen.*;
 import io.swagger.codegen.languages.features.BeanValidationFeatures;
 import io.swagger.codegen.languages.features.GzipFeatures;
 import io.swagger.codegen.languages.features.PerformBeanValidationFeatures;
+
 import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -14,6 +20,11 @@ import java.io.File;
 import java.util.*;
 import java.util.regex.Pattern;
 
+/**
+ * new version of this class can be found on: https://github.com/swagger-api/swagger-codegen-generators
+ * @deprecated use <code>io.swagger.codegen.languages.java.JavaClientCodegen</code> instead.
+ */
+@Deprecated
 public class JavaClientCodegen extends AbstractJavaCodegen
         implements BeanValidationFeatures, PerformBeanValidationFeatures,
                    GzipFeatures
@@ -49,6 +60,7 @@ public class JavaClientCodegen extends AbstractJavaCodegen
     protected boolean useGzipFeature = false;
     protected boolean useRuntimeException = false;
 
+
     public JavaClientCodegen() {
         super();
         outputFolder = "generated-code" + File.separator + "java";
@@ -78,6 +90,7 @@ public class JavaClientCodegen extends AbstractJavaCodegen
         supportedLibraries.put("resttemplate", "HTTP client: Spring RestTemplate 4.3.9-RELEASE. JSON processing: Jackson 2.8.9");
         supportedLibraries.put("resteasy", "HTTP client: Resteasy client 3.1.3.Final. JSON processing: Jackson 2.8.9");
         supportedLibraries.put("vertx", "HTTP client: VertX client 3.2.4. JSON processing: Jackson 2.8.9");
+        supportedLibraries.put("google-api-client", "HTTP client: Google API client 1.23.0. JSON processing: Jackson 2.8.9");
 
         CliOption libraryOption = new CliOption(CodegenConstants.LIBRARY, "library template (sub-template) to use");
         libraryOption.setEnum(supportedLibraries);
@@ -106,6 +119,7 @@ public class JavaClientCodegen extends AbstractJavaCodegen
     @Override
     public void processOpts() {
         super.processOpts();
+        embeddedTemplateDir = templateDir = "v2/Java";
 
         if (additionalProperties.containsKey(USE_RX_JAVA) && additionalProperties.containsKey(USE_RX_JAVA2)) {
             LOGGER.warn("You specified both RxJava versions 1 and 2 but they are mutually exclusive. Defaulting to v2.");
@@ -168,10 +182,13 @@ public class JavaClientCodegen extends AbstractJavaCodegen
             supportingFiles.add(new SupportingFile("StringUtil.mustache", invokerFolder, "StringUtil.java"));
         }
 
-        supportingFiles.add(new SupportingFile("auth/HttpBasicAuth.mustache", authFolder, "HttpBasicAuth.java"));
-        supportingFiles.add(new SupportingFile("auth/ApiKeyAuth.mustache", authFolder, "ApiKeyAuth.java"));
-        supportingFiles.add(new SupportingFile("auth/OAuth.mustache", authFolder, "OAuth.java"));
-        supportingFiles.add(new SupportingFile("auth/OAuthFlow.mustache", authFolder, "OAuthFlow.java"));
+        // google-api-client doesn't use the Swagger auth, because it uses Google Credential directly (HttpRequestInitializer)
+        if (!"google-api-client".equals(getLibrary())) {
+            supportingFiles.add(new SupportingFile("auth/HttpBasicAuth.mustache", authFolder, "HttpBasicAuth.java"));
+            supportingFiles.add(new SupportingFile("auth/ApiKeyAuth.mustache", authFolder, "ApiKeyAuth.java"));
+            supportingFiles.add(new SupportingFile("auth/OAuth.mustache", authFolder, "OAuth.java"));
+            supportingFiles.add(new SupportingFile("auth/OAuthFlow.mustache", authFolder, "OAuthFlow.java"));
+        }
         supportingFiles.add(new SupportingFile( "gradlew.mustache", "", "gradlew") );
         supportingFiles.add(new SupportingFile( "gradlew.bat.mustache", "", "gradlew.bat") );
         supportingFiles.add(new SupportingFile( "gradle-wrapper.properties.mustache",
@@ -192,7 +209,7 @@ public class JavaClientCodegen extends AbstractJavaCodegen
             apiDocTemplateFiles.remove("api_doc.mustache");
         }
 
-        if (!("feign".equals(getLibrary()) || "resttemplate".equals(getLibrary()) || usesAnyRetrofitLibrary())) {
+        if (!("feign".equals(getLibrary()) || "resttemplate".equals(getLibrary()) || usesAnyRetrofitLibrary() || "google-api-client".equals(getLibrary()))) {
             supportingFiles.add(new SupportingFile("apiException.mustache", invokerFolder, "ApiException.java"));
             supportingFiles.add(new SupportingFile("Configuration.mustache", invokerFolder, "Configuration.java"));
             supportingFiles.add(new SupportingFile("Pair.mustache", invokerFolder, "Pair.java"));
@@ -233,9 +250,12 @@ public class JavaClientCodegen extends AbstractJavaCodegen
             setJava8Mode(true);
             additionalProperties.put("java8", "true");
             additionalProperties.put("jackson", "true");
+
             apiTemplateFiles.put("apiImpl.mustache", "Impl.java");
             apiTemplateFiles.put("rxApiImpl.mustache", ".java");
             supportingFiles.remove(new SupportingFile("manifest.mustache", projectFolder, "AndroidManifest.xml"));
+        } else if ("google-api-client".equals(getLibrary())) {
+            additionalProperties.put("jackson", "true");
         } else {
             LOGGER.error("Unknown library option (-l/--library): " + getLibrary());
         }
@@ -304,10 +324,11 @@ public class JavaClientCodegen extends AbstractJavaCodegen
             if (operations != null) {
                 List<CodegenOperation> ops = (List<CodegenOperation>) operations.get("operation");
                 for (CodegenOperation operation : ops) {
-                    if (operation.hasConsumes == Boolean.TRUE) {
+                    boolean hasConsumes = getBooleanValue(operation, CodegenConstants.HAS_CONSUMES_EXT_NAME);
+                    if (hasConsumes) {
 
                         if (isMultipartType(operation.consumes)) {
-                            operation.isMultipart = Boolean.TRUE;
+                            operation.getVendorExtensions().put(CodegenConstants.IS_MULTIPART_EXT_NAME, Boolean.TRUE);
                         }
                         else {
                             operation.prioritizedContentTypes = prioritizeContentTypes(operation.consumes);
@@ -316,10 +337,36 @@ public class JavaClientCodegen extends AbstractJavaCodegen
                     if (operation.returnType == null) {
                         operation.returnType = "Void";
                     }
-                    if (usesRetrofit2Library() && StringUtils.isNotEmpty(operation.path) && operation.path.startsWith("/"))
+                    if (usesRetrofit2Library() && StringUtils.isNotEmpty(operation.path) && operation.path.startsWith("/")){
                         operation.path = operation.path.substring(1);
+                    }
+
+                    // sorting operation parameters to make sure path params are parsed before query params
+                    if (operation.allParams != null) {
+                        sort(operation.allParams, new Comparator<CodegenParameter>() {
+                            @Override
+                            public int compare(CodegenParameter one, CodegenParameter another) {
+                                if (getBooleanValue(one, CodegenConstants.IS_PATH_PARAM_EXT_NAME)
+                                        && getBooleanValue(another, CodegenConstants.IS_QUERY_PARAM_EXT_NAME)) {
+                                    return -1;
+                                }
+                                if (getBooleanValue(one, CodegenConstants.IS_QUERY_PARAM_EXT_NAME)
+                                        && getBooleanValue(another, CodegenConstants.IS_PATH_PARAM_EXT_NAME)){
+                                    return 1;
+                                }
+
+                                return 0;
+                            }
+                        });
+                        Iterator<CodegenParameter> iterator = operation.allParams.iterator();
+                        while (iterator.hasNext()){
+                            CodegenParameter param = iterator.next();
+                            param.getVendorExtensions().put(CodegenConstants.HAS_MORE_EXT_NAME, iterator.hasNext());
+                        }
+                    }
                 }
             }
+
         }
 
         // camelize path variables for Feign client
@@ -408,7 +455,8 @@ public class JavaClientCodegen extends AbstractJavaCodegen
     @Override
     public void postProcessModelProperty(CodegenModel model, CodegenProperty property) {
         super.postProcessModelProperty(model, property);
-        if(!BooleanUtils.toBoolean(model.isEnum)) {
+        boolean isEnum = getBooleanValue(model, IS_ENUM_EXT_NAME);
+        if(!BooleanUtils.toBoolean(isEnum)) {
             //final String lib = getLibrary();
             //Needed imports for Jackson based libraries
             if(additionalProperties.containsKey("jackson")) {
@@ -462,7 +510,8 @@ public class JavaClientCodegen extends AbstractJavaCodegen
                 Map<String, Object> mo = (Map<String, Object>) _mo;
                 CodegenModel cm = (CodegenModel) mo.get("model");
                 // for enum model
-                if (Boolean.TRUE.equals(cm.isEnum) && cm.allowableValues != null) {
+                boolean isEnum = getBooleanValue(cm, IS_ENUM_EXT_NAME);
+                if (Boolean.TRUE.equals(isEnum) && cm.allowableValues != null) {
                     cm.imports.add(importMapping.get("SerializedName"));
                     Map<String, String> item = new HashMap<String, String>();
                     item.put("import", importMapping.get("SerializedName"));

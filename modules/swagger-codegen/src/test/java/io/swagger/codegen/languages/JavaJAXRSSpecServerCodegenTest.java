@@ -2,14 +2,14 @@ package io.swagger.codegen.languages;
 
 import io.swagger.codegen.CliOption;
 import io.swagger.codegen.SupportingFile;
-import io.swagger.models.properties.BooleanProperty;
+import io.swagger.v3.parser.util.SchemaTypeUtil;
 import org.junit.Test;
 import org.testng.Assert;
 
 public class JavaJAXRSSpecServerCodegenTest {
 
     private JavaJAXRSSpecServerCodegen generator = new JavaJAXRSSpecServerCodegen();
-
+/** disabled test for currently not supported languages.
     @Test
     public void do_not_process_RestApplication_when_interfaceOnly_is_true() {
         generator.additionalProperties().put(JavaJAXRSSpecServerCodegen.INTERFACE_ONLY, "true");
@@ -55,7 +55,7 @@ public class JavaJAXRSSpecServerCodegenTest {
     public void verify_that_generatePom_exists_as_a_parameter_with_default_true() {
         for (CliOption option : generator.cliOptions()) {
             if (option.getOpt().equals(JavaJAXRSSpecServerCodegen.GENERATE_POM)) {
-                Assert.assertEquals(BooleanProperty.TYPE, option.getType());
+                Assert.assertEquals(SchemaTypeUtil.BOOLEAN_TYPE, option.getType());
                 Assert.assertEquals("true", option.getDefault());
                 return;
             }
@@ -67,11 +67,12 @@ public class JavaJAXRSSpecServerCodegenTest {
     public void verify_that_interfaceOnly_exists_as_a_parameter_with_default_false() {
         for (CliOption option : generator.cliOptions()) {
             if (option.getOpt().equals(JavaJAXRSSpecServerCodegen.INTERFACE_ONLY)) {
-                Assert.assertEquals(BooleanProperty.TYPE, option.getType());
+                Assert.assertEquals(SchemaTypeUtil.BOOLEAN_TYPE, option.getType());
                 Assert.assertEquals("false", option.getDefault());
                 return;
             }
         }
         Assert.fail("Missing " + JavaJAXRSSpecServerCodegen.INTERFACE_ONLY);
     }
+    */
 }

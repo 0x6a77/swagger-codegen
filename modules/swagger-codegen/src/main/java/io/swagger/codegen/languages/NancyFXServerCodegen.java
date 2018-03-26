@@ -7,17 +7,16 @@ import static java.util.Arrays.asList;
 import static java.util.UUID.randomUUID;
 import static org.apache.commons.lang3.StringUtils.capitalize;
 
+import io.swagger.codegen.CodegenConstants;
 import io.swagger.codegen.CodegenModel;
 import io.swagger.codegen.CodegenOperation;
 import io.swagger.codegen.CodegenProperty;
 import io.swagger.codegen.CodegenType;
 import io.swagger.codegen.SupportingFile;
 import io.swagger.codegen.utils.ModelUtils;
-import io.swagger.models.Swagger;
-import io.swagger.models.properties.Property;
-import io.swagger.models.properties.StringProperty;
 
 import java.io.File;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -27,6 +26,11 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import io.swagger.codegen.utils.URLPathUtil;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.media.Schema;
+import io.swagger.v3.oas.models.media.StringSchema;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,9 +50,10 @@ public class NancyFXServerCodegen extends AbstractCSharpCodegen {
     private static final String IMMUTABLE_OPTION = "immutable";
     private static final String USE_BASE_PATH = "writeModulePath";
     private static final String PACKAGE_CONTEXT = "packageContext";
+    private static final String ASYNC_SERVER = "asyncServer";
 
-    private static final Map<String, Predicate<Property>> propertyToSwaggerTypeMapping =
-            createPropertyToSwaggerTypeMapping();
+    private static final Map<String, Predicate<Schema>> propertyToSwaggerTypeMapping =
+            createPropertyToSchemaTypeMapping();
 
     private String packageGuid = "{" + randomUUID().toString().toUpperCase() + "}";
 
@@ -56,6 +61,9 @@ public class NancyFXServerCodegen extends AbstractCSharpCodegen {
     private final Set<String> parentModels = new HashSet<>();
     private final Multimap<String, CodegenModel> childrenByParent = ArrayListMultimap.create();
     private final BiMap<String, String> modelNameMapping = HashBiMap.create();
+
+    /** If set to true, we will generate c# async endpoints and service interfaces */
+    private boolean asyncServer = false;
 
     public NancyFXServerCodegen() {
         outputFolder = "generated-code" + File.separator + getName();
@@ -87,6 +95,7 @@ public class NancyFXServerCodegen extends AbstractCSharpCodegen {
         addSwitch(RETURN_ICOLLECTION, RETURN_ICOLLECTION_DESC, returnICollection);
         addSwitch(IMMUTABLE_OPTION, "Enabled by default. If disabled generates model classes with setters", true);
         addSwitch(USE_BASE_PATH, "Enabled by default. If disabled, module paths will not mirror api base path", true);
+        addSwitch(ASYNC_SERVER, "Set to true to enable the generation of async routes/endpoints.", this.asyncServer);
         typeMapping.putAll(nodaTimeTypesMappings());
         languageSpecificPrimitives.addAll(nodaTimePrimitiveTypes());
 
@@ -116,6 +125,7 @@ public class NancyFXServerCodegen extends AbstractCSharpCodegen {
         modelPackage = isNullOrEmpty(packageName) ? MODEL_NAMESPACE : packageName + "." + MODEL_NAMESPACE;
 
         supportingFiles.add(new SupportingFile("parameters.mustache", sourceFile("Utils"), "Parameters.cs"));
+        supportingFiles.add(new SupportingFile("localDateConverter.mustache", sourceFile("Utils"), "LocalDateConverter.cs"));
         supportingFiles.add(new SupportingFile("packages.config.mustache", sourceFolder(), "packages.config"));
         supportingFiles.add(new SupportingFile("nuspec.mustache", sourceFolder(), packageName + ".nuspec"));
 
@@ -126,6 +136,12 @@ public class NancyFXServerCodegen extends AbstractCSharpCodegen {
         
         if (additionalProperties.containsKey(OPTIONAL_PROJECT_GUID)) {
             setPackageGuid((String) additionalProperties.get(OPTIONAL_PROJECT_GUID));
+        }
+
+        if (additionalProperties.containsKey(ASYNC_SERVER)) {
+            setAsyncServer(convertPropertyToBooleanAndWriteBack(ASYNC_SERVER));
+        } else {
+            additionalProperties.put(ASYNC_SERVER, this.asyncServer);
         }
 
         additionalProperties.put("packageGuid", packageGuid);
@@ -199,7 +215,11 @@ public class NancyFXServerCodegen extends AbstractCSharpCodegen {
     public void setPackageGuid(String packageGuid) {
         this.packageGuid = packageGuid;
     }
-    
+
+    public void setAsyncServer(boolean asyncServer) {
+        this.asyncServer = asyncServer;
+    }
+
     @Override
     public String apiFileFolder() {
         return outputFolder + File.separator + sourceFolder() + File.separator + API_NAMESPACE;
@@ -232,7 +252,7 @@ public class NancyFXServerCodegen extends AbstractCSharpCodegen {
         log.debug("Processing parents:  " + parentModels);
         for (final String parent : parentModels) {
             final CodegenModel parentModel = ModelUtils.getModelByName(parent, models);
-            parentModel.hasChildren = true;
+            parentModel.getVendorExtensions().put(CodegenConstants.HAS_CHILDREN_EXT_NAME, Boolean.TRUE);
             final Collection<CodegenModel> childrenModels = childrenByParent.get(parent);
             for (final CodegenModel child : childrenModels) {
                 processParentPropertiesInChildModel(parentModel, child);
@@ -251,12 +271,12 @@ public class NancyFXServerCodegen extends AbstractCSharpCodegen {
             if (duplicatedByParent != null) {
                 log.info(String.format("Property: '%s' in '%s' model is inherited from '%s'" ,
                         property.name, child.classname, parent.classname));
-                duplicatedByParent.isInherited = true;
+                duplicatedByParent.getVendorExtensions().put(CodegenConstants.IS_INHERITED_EXT_NAME, Boolean.TRUE);
                 final CodegenProperty parentVar = duplicatedByParent.clone();
-                parentVar.hasMore = false;
+                parentVar.getVendorExtensions().put(CodegenConstants.HAS_MORE_EXT_NAME, Boolean.FALSE);
                 child.parentVars.add(parentVar);
                 if (previousParentVar != null) {
-                    previousParentVar.hasMore = true;
+                    previousParentVar.getVendorExtensions().put(CodegenConstants.HAS_MORE_EXT_NAME, Boolean.TRUE);
                 }
                 previousParentVar = parentVar;
             }
@@ -336,11 +356,16 @@ public class NancyFXServerCodegen extends AbstractCSharpCodegen {
     }
 
     @Override
-    public void preprocessSwagger(final Swagger swagger) {
+    public void preprocessOpenAPI(final OpenAPI openAPI) {
+        URL url = URLPathUtil.getServerURL(openAPI);
+        String path = "/";
+        if(url != null) {
+            path = url.getPath();
+        }
         final String packageContextOption = (String) additionalProperties.get(PACKAGE_CONTEXT);
-        additionalProperties.put("packageContext", packageContextOption == null ? sanitizeName(swagger.getBasePath()) : packageContextOption);
+        additionalProperties.put("packageContext", packageContextOption == null ? sanitizeName(path) : packageContextOption);
         final Object basePathOption = additionalProperties.get(USE_BASE_PATH);
-        additionalProperties.put("baseContext", basePathOption == null ? swagger.getBasePath() : "/");
+        additionalProperties.put("baseContext", basePathOption == null ? path : "/");
     }
 
     @Override
@@ -349,26 +374,30 @@ public class NancyFXServerCodegen extends AbstractCSharpCodegen {
     }
 
     @Override
-    public String getSwaggerType(final Property property) {
-        for (Entry<String, Predicate<Property>> entry : propertyToSwaggerTypeMapping.entrySet()) {
+    public String getSchemaType(final Schema property) {
+        for (Entry<String, Predicate<Schema>> entry : propertyToSwaggerTypeMapping.entrySet()) {
             if (entry.getValue().apply(property)) {
                 return entry.getKey();
             }
         }
-        return super.getSwaggerType(property);
+        return super.getSchemaType(property);
     }
 
-    private static Map<String, Predicate<Property>> createPropertyToSwaggerTypeMapping() {
-        final ImmutableMap.Builder<String, Predicate<Property>> mapping = ImmutableMap.builder();
+    private static Map<String, Predicate<Schema>> createPropertyToSchemaTypeMapping() {
+        final ImmutableMap.Builder<String, Predicate<Schema>> mapping = ImmutableMap.builder();
         mapping.put("time", timeProperty());
         return mapping.build();
     }
 
-    private static Predicate<Property> timeProperty() {
-        return new Predicate<Property>() {
+    private static Predicate<Schema> timeProperty() {
+        return new Predicate<Schema>() {
             @Override
-            public boolean apply(Property property) {
-                return property instanceof StringProperty && "time".equalsIgnoreCase(property.getFormat());
+            public boolean apply(Schema property) {
+                return property instanceof StringSchema && "time".equalsIgnoreCase(property.getFormat());
+            }
+
+            public boolean test(Schema schema) {
+                return this.apply(schema);
             }
         };
     }
@@ -376,12 +405,12 @@ public class NancyFXServerCodegen extends AbstractCSharpCodegen {
     private static Map<String, String> nodaTimeTypesMappings() {
         return ImmutableMap.of(
                 "time", "LocalTime?",
-                "date", "ZonedDateTime?",
+                "date", "LocalDate?",
                 "datetime", "ZonedDateTime?");
     }
 
     private static Set<String> nodaTimePrimitiveTypes() {
-        return ImmutableSet.of("LocalTime?", "ZonedDateTime?");
+        return ImmutableSet.of("LocalTime?", "LocalDate?","ZonedDateTime?");
     }
 
     private class DependencyInfo {

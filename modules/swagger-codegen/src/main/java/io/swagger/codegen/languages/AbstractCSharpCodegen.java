@@ -1,13 +1,24 @@
 package io.swagger.codegen.languages;
 
 import io.swagger.codegen.*;
-import io.swagger.models.properties.*;
+import io.swagger.v3.oas.models.media.ArraySchema;
+import io.swagger.v3.oas.models.media.DateSchema;
+import io.swagger.v3.oas.models.media.DateTimeSchema;
+import io.swagger.v3.oas.models.media.MapSchema;
+import io.swagger.v3.oas.models.media.Schema;
+import io.swagger.v3.oas.models.media.StringSchema;
+import io.swagger.v3.parser.util.SchemaTypeUtil;
+import io.swagger.codegen.utils.ModelUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.util.*;
+
+import static io.swagger.codegen.CodegenConstants.IS_ENUM_EXT_NAME;
+import static io.swagger.codegen.languages.helpers.ExtensionHelper.getBooleanValue;
+import static io.swagger.codegen.utils.ModelUtils.updateCodegenPropertyEnum;
 
 public abstract class AbstractCSharpCodegen extends DefaultCodegen implements CodegenConfig {
 
@@ -262,24 +273,33 @@ public abstract class AbstractCSharpCodegen extends DefaultCodegen implements Co
         
         // {{useDateTimeOffset}}
         if (additionalProperties.containsKey(CodegenConstants.USE_DATETIME_OFFSET)) {
-            useDateTimeOffset(Boolean.valueOf(additionalProperties.get(CodegenConstants.USE_DATETIME_OFFSET).toString()));
+            useDateTimeOffset(convertPropertyToBooleanAndWriteBack(CodegenConstants.USE_DATETIME_OFFSET));
+        } else {
+            additionalProperties.put(CodegenConstants.USE_DATETIME_OFFSET, useDateTimeOffsetFlag);
         }
-        additionalProperties.put(CodegenConstants.USE_DATETIME_OFFSET, useDateTimeOffsetFlag);
 
         if (additionalProperties.containsKey(CodegenConstants.USE_COLLECTION)) {
-            setUseCollection(Boolean.valueOf(additionalProperties.get(CodegenConstants.USE_COLLECTION).toString()));
+            setUseCollection(convertPropertyToBooleanAndWriteBack(CodegenConstants.USE_COLLECTION));
+        } else {
+            additionalProperties.put(CodegenConstants.USE_COLLECTION, useCollection);
         }
 
         if (additionalProperties.containsKey(CodegenConstants.RETURN_ICOLLECTION)) {
-            setReturnICollection(Boolean.valueOf(additionalProperties.get(CodegenConstants.RETURN_ICOLLECTION).toString()));
+            setReturnICollection(convertPropertyToBooleanAndWriteBack(CodegenConstants.RETURN_ICOLLECTION));
+        } else {
+            additionalProperties.put(CodegenConstants.RETURN_ICOLLECTION, returnICollection);
         }
 
         if (additionalProperties.containsKey(CodegenConstants.OPTIONAL_EMIT_DEFAULT_VALUES)) {
-            setOptionalEmitDefaultValue(Boolean.valueOf(additionalProperties.get(CodegenConstants.OPTIONAL_EMIT_DEFAULT_VALUES).toString()));
+            setOptionalEmitDefaultValue(convertPropertyToBooleanAndWriteBack(CodegenConstants.OPTIONAL_EMIT_DEFAULT_VALUES));
+        } else {
+            additionalProperties.put(CodegenConstants.OPTIONAL_EMIT_DEFAULT_VALUES, optionalEmitDefaultValue);
         }
 
         if (additionalProperties.containsKey(CodegenConstants.NETCORE_PROJECT_FILE)) {
-            setNetCoreProjectFileFlag(Boolean.valueOf(additionalProperties.get(CodegenConstants.NETCORE_PROJECT_FILE).toString()));
+            setNetCoreProjectFileFlag(convertPropertyToBooleanAndWriteBack(CodegenConstants.NETCORE_PROJECT_FILE));
+        } else {
+            additionalProperties.put(CodegenConstants.NETCORE_PROJECT_FILE, netCoreProjectFileFlag);
         }
 
         if (additionalProperties.containsKey(CodegenConstants.INTERFACE_PREFIX)) {
@@ -294,6 +314,11 @@ public abstract class AbstractCSharpCodegen extends DefaultCodegen implements Co
 
         // This either updates additionalProperties with the above fixes, or sets the default if the option was not specified.
         additionalProperties.put(CodegenConstants.INTERFACE_PREFIX, interfacePrefix);
+    }
+
+    @Override
+    public void postProcessModelProperty(CodegenModel model, CodegenProperty property) {
+        super.postProcessModelProperty(model, property);
     }
 
     @Override
@@ -313,6 +338,143 @@ public abstract class AbstractCSharpCodegen extends DefaultCodegen implements Co
         }
         // process enum in models
         return postProcessModelsEnum(objs);
+    }
+
+    /**
+     * Invoked by {@link DefaultGenerator} after all models have been post-processed, allowing for a last pass of codegen-specific model cleanup.
+     *
+     * @param objs Current state of codegen object model.
+     * @return An in-place modified state of the codegen object model.
+     */
+    @Override
+    public Map<String, Object> postProcessAllModels(Map<String, Object> objs) {
+        final Map<String, Object> processed =  super.postProcessAllModels(objs);
+        postProcessEnumRefs(processed);
+        return processed;
+    }
+
+    /**
+     * C# differs from other languages in that Enums are not _true_ objects; enums are compiled to integral types.
+     * So, in C#, an enum is considers more like a user-defined primitive.
+     *
+     * When working with enums, we can't always assume a RefModel is a nullable type (where default(YourType) == null),
+     * so this post processing runs through all models to find RefModel'd enums. Then, it runs through all vars and modifies
+     * those vars referencing RefModel'd enums to work the same as inlined enums rather than as objects.
+     * @param models
+     */
+    @SuppressWarnings({ "unchecked" })
+    private void postProcessEnumRefs(final Map<String, Object> models) {
+        Map<String, CodegenModel> enumRefs = new HashMap<String, CodegenModel>();
+        for (Map.Entry<String, Object> entry : models.entrySet()) {
+            CodegenModel model = ModelUtils.getModelByName(entry.getKey(), models);
+            boolean isEnum = getBooleanValue(model, IS_ENUM_EXT_NAME);
+            if (isEnum) {
+                enumRefs.put(entry.getKey(), model);
+            }
+        }
+
+        for (Map.Entry<String, Object> entry : models.entrySet()) {
+            String swaggerName = entry.getKey();
+            CodegenModel model = ModelUtils.getModelByName(swaggerName, models);
+            if (model != null) {
+                for (CodegenProperty var : model.allVars) {
+                    if (enumRefs.containsKey(var.datatype)) {
+                        // Handle any enum properties referred to by $ref.
+                        // This is different in C# than most other generators, because enums in C# are compiled to integral types,
+                        // while enums in many other languages are true objects.
+                        CodegenModel refModel = enumRefs.get(var.datatype);
+                        var.allowableValues = refModel.allowableValues;
+                        updateCodegenPropertyEnum(var);
+
+                        // We do these after updateCodegenPropertyEnum to avoid generalities that don't mesh with C#.
+                        var.getVendorExtensions().put(CodegenConstants.IS_PRIMITIVE_TYPE_EXT_NAME, Boolean.TRUE);
+                        var.getVendorExtensions().put(IS_ENUM_EXT_NAME, Boolean.TRUE);
+                    }
+                }
+
+                // We're looping all models here.
+                if (getBooleanValue(model, CodegenConstants.IS_ENUM_EXT_NAME)) {
+                    // We now need to make allowableValues.enumVars look like the context of CodegenProperty
+                    Boolean isString = false;
+                    Boolean isInteger = false;
+                    Boolean isLong = false;
+                    Boolean isByte = false;
+
+                    if (model.dataType.startsWith("byte")) {
+                        // C# Actually supports byte and short enums, swagger spec only supports byte.
+                        isByte = true;
+                        model.vendorExtensions.put("x-enum-byte", true);
+                    } else if (model.dataType.startsWith("int32")) {
+                        isInteger = true;
+                        model.vendorExtensions.put("x-enum-integer", true);
+                    } else if (model.dataType.startsWith("int64")) {
+                        isLong = true;
+                        model.vendorExtensions.put("x-enum-long", true);
+                    } else {
+                        // C# doesn't support non-integral enums, so we need to treat everything else as strings (e.g. to not lose precision or data integrity)
+                        isString = true;
+                        model.vendorExtensions.put("x-enum-string", true);
+                    }
+
+                    // Since we iterate enumVars for modelnnerEnum and enumClass templates, and CodegenModel is missing some of CodegenProperty's properties,
+                    // we can take advantage of Mustache's contextual lookup to add the same "properties" to the model's enumVars scope rather than CodegenProperty's scope.
+                    List<Map<String, String>> enumVars = (ArrayList<Map<String, String>>)model.allowableValues.get("enumVars");
+                    List<Map<String, Object>> newEnumVars = new ArrayList<Map<String, Object>>();
+                    for (Map<String, String> enumVar : enumVars) {
+                        Map<String, Object> mixedVars = new HashMap<String, Object>();
+                        mixedVars.putAll(enumVar);
+
+                        mixedVars.put("isString", isString);
+                        mixedVars.put("isLong", isLong);
+                        mixedVars.put("isInteger", isInteger);
+                        mixedVars.put("isByte", isByte);
+
+                        newEnumVars.add(mixedVars);
+                    }
+
+                    if (!newEnumVars.isEmpty()) {
+                        model.allowableValues.put("enumVars", newEnumVars);
+                    }
+                }
+            } else {
+                LOGGER.warn("Expected to retrieve model %s by name, but no model was found. Check your -Dmodels inclusions.", swaggerName);
+            }
+        }
+    }
+
+    /**
+     * Update codegen property's enum by adding "enumVars" (with name and value)
+     *
+     * @param var list of CodegenProperty
+     */
+    public void updateCodegenPropertyEnum(CodegenProperty var) {
+        if (var.vendorExtensions == null) {
+            var.vendorExtensions = new HashMap<>();
+        }
+
+        ModelUtils.updateCodegenPropertyEnum(var);
+
+        // Because C# uses nullable primitives for datatype, and datatype is used in DefaultCodegen for determining enum-ness, guard against weirdness here.
+        if (getBooleanValue(var, CodegenConstants.IS_ENUM_EXT_NAME)) {
+            if ("byte".equals(var.dataFormat)) {// C# Actually supports byte and short enums.
+                var.vendorExtensions.put("x-enum-byte", true);
+                var.vendorExtensions.put(CodegenConstants.IS_STRING_EXT_NAME, Boolean.FALSE);
+                var.vendorExtensions.put(CodegenConstants.IS_LONG_EXT_NAME, Boolean.FALSE);
+                var.vendorExtensions.put(CodegenConstants.IS_INTEGER_EXT_NAME, Boolean.FALSE);
+            } else if ("int32".equals(var.dataFormat)) {
+                var.vendorExtensions.put(CodegenConstants.IS_INTEGER_EXT_NAME, Boolean.TRUE);
+                var.vendorExtensions.put(CodegenConstants.IS_STRING_EXT_NAME, Boolean.FALSE);
+                var.vendorExtensions.put(CodegenConstants.IS_LONG_EXT_NAME, Boolean.FALSE);
+            } else if ("int64".equals(var.dataFormat)) {
+                var.vendorExtensions.put(CodegenConstants.IS_LONG_EXT_NAME, Boolean.TRUE);
+                var.vendorExtensions.put(CodegenConstants.IS_STRING_EXT_NAME, Boolean.FALSE);
+                var.vendorExtensions.put(CodegenConstants.IS_INTEGER_EXT_NAME, Boolean.FALSE);
+            } else {// C# doesn't support non-integral enums, so we need to treat everything else as strings (e.g. to not lose precision or data integrity)
+                var.vendorExtensions.put(CodegenConstants.IS_STRING_EXT_NAME, Boolean.TRUE);
+                var.vendorExtensions.put(CodegenConstants.IS_LONG_EXT_NAME, Boolean.FALSE);
+                var.vendorExtensions.put(CodegenConstants.IS_INTEGER_EXT_NAME, Boolean.FALSE);
+            }
+        }
     }
 
     @Override
@@ -335,7 +497,7 @@ public abstract class AbstractCSharpCodegen extends DefaultCodegen implements Co
                         }
 
                         if (this.collectionTypes.contains(typeMapping)) {
-                            operation.isListContainer = true;
+                            operation.getVendorExtensions().put(CodegenConstants.IS_LIST_CONTAINER_EXT_NAME, Boolean.TRUE);
                             operation.returnContainer = operation.returnType;
                             if (this.returnICollection && (
                                     typeMapping.startsWith("List") ||
@@ -348,7 +510,21 @@ public abstract class AbstractCSharpCodegen extends DefaultCodegen implements Co
                             }
                         } else {
                             operation.returnContainer = operation.returnType;
-                            operation.isMapContainer = this.mapTypes.contains(typeMapping);
+                            operation.getVendorExtensions().put(CodegenConstants.IS_MAP_CONTAINER_EXT_NAME, this.mapTypes.contains(typeMapping));
+                        }
+                    }
+
+                    if (operation.examples != null){
+                        for (Map<String, String> example : operation.examples)
+                        {
+                            for (Map.Entry<String, String> entry : example.entrySet())
+                            {
+                                // Replace " with \", \r, \n with \\r, \\n
+                                String val = entry.getValue().replace("\"", "\\\"")
+                                    .replace("\r","\\r")
+                                    .replace("\n","\\n");
+                                entry.setValue(val);
+                            }
                         }
                     }
 
@@ -454,110 +630,67 @@ public abstract class AbstractCSharpCodegen extends DefaultCodegen implements Co
     /**
      * Return the example value of the property
      *
-     * @param p Swagger property object
+     * @param schema Schema property object
      * @return string presentation of the example value of the property
      */
     @Override
-    public String toExampleValue(Property p) {
-        if (p instanceof StringProperty) {
-            StringProperty dp = (StringProperty) p;
-            if (dp.getExample() != null) {
-                return "\"" + dp.getExample().toString() + "\"";
-            }
-        } else if (p instanceof BooleanProperty) {
-            BooleanProperty dp = (BooleanProperty) p;
-            if (dp.getExample() != null) {
-                return dp.getExample().toString();
-            }
-        } else if (p instanceof DateProperty) {
-            // TODO
-        } else if (p instanceof DateTimeProperty) {
-            // TODO
-        } else if (p instanceof DoubleProperty) {
-            DoubleProperty dp = (DoubleProperty) p;
-            if (dp.getExample() != null) {
-                return dp.getExample().toString();
-            }
-        } else if (p instanceof FloatProperty) {
-            FloatProperty dp = (FloatProperty) p;
-            if (dp.getExample() != null) {
-                return dp.getExample().toString();
-            }
-        } else if (p instanceof IntegerProperty) {
-            IntegerProperty dp = (IntegerProperty) p;
-            if (dp.getExample() != null) {
-                return dp.getExample().toString();
-            }
-        } else if (p instanceof LongProperty) {
-            LongProperty dp = (LongProperty) p;
-            if (dp.getExample() != null) {
-                return dp.getExample().toString();
+    public String toExampleValue(Schema schema) {
+        if (schema instanceof StringSchema) {
+            if (schema.getExample() != null) {
+                return String.format("\"%s\"", schema.getExample().toString());
             }
         }
-
+        if (schema instanceof DateSchema || schema instanceof DateTimeSchema) {
+            // TODO still...
+            return null;
+        } else {
+            if (schema.getExample() != null) {
+                return schema.getExample().toString();
+            }
+        }
         return null;
     }
 
     /**
      * Return the default value of the property
      *
-     * @param p Swagger property object
+     * @param schema Schema property object
      * @return string presentation of the default value of the property
      */
     @Override
-    public String toDefaultValue(Property p) {
-        if (p instanceof StringProperty) {
-            StringProperty dp = (StringProperty) p;
-            if (dp.getDefault() != null) {
-               String _default = dp.getDefault();
-               if (dp.getEnum() == null) {
-                   return "\"" + _default + "\"";
+    public String toDefaultValue(Schema schema) {
+        if (schema instanceof StringSchema) {
+            if (schema.getDefault() != null) {
+               String _default = schema.getDefault().toString();
+               if (schema.getEnum() == null) {
+                   return String.format("\"%s\"", _default);
                } else {
                    // convert to enum var name later in postProcessModels
                    return _default;
                }
             }
-        } else if (p instanceof BooleanProperty) {
-            BooleanProperty dp = (BooleanProperty) p;
-            if (dp.getDefault() != null) {
-                return dp.getDefault().toString();
-            }
-        } else if (p instanceof DateProperty) {
-            // TODO
-        } else if (p instanceof DateTimeProperty) {
-            // TODO
-        } else if (p instanceof DoubleProperty) {
-            DoubleProperty dp = (DoubleProperty) p;
-            if (dp.getDefault() != null) {
-                return dp.getDefault().toString();
-            }
-        } else if (p instanceof FloatProperty) {
-            FloatProperty dp = (FloatProperty) p;
-            if (dp.getDefault() != null) {
-                return String.format("%1$sF", dp.getDefault());
-            }
-        } else if (p instanceof IntegerProperty) {
-            IntegerProperty dp = (IntegerProperty) p;
-            if (dp.getDefault() != null) {
-                return dp.getDefault().toString();
-            }
-        } else if (p instanceof LongProperty) {
-            LongProperty dp = (LongProperty) p;
-            if (dp.getDefault() != null) {
-                return dp.getDefault().toString();
+        }
+        if (schema instanceof DateSchema || schema instanceof DateTimeSchema) {
+            // TODO still...
+            return null;
+        } else {
+            if (schema.getDefault() != null) {
+                if(SchemaTypeUtil.INTEGER64_FORMAT.equals(schema.getFormat())) {
+                    return String.format("%1$sF", schema.getDefault());
+                }
+                return schema.getDefault().toString();
             }
         }
-
         return null;
     }
 
     @Override
-    public String getSwaggerType(Property p) {
-        String swaggerType = super.getSwaggerType(p);
+    public String getSchemaType(Schema propertySchema) {
+        String swaggerType = super.getSchemaType(propertySchema);
         String type;
 
         if (swaggerType == null) {
-            swaggerType = ""; // set swagger type to empty string if null
+            swaggerType = StringUtils.EMPTY; // set swagger type to empty string if null
         }
 
         // TODO avoid using toLowerCase as typeMapping should be case-sensitive
@@ -573,18 +706,15 @@ public abstract class AbstractCSharpCodegen extends DefaultCodegen implements Co
     }
 
     @Override
-    public String getTypeDeclaration(Property p) {
-        if (p instanceof ArrayProperty) {
-            ArrayProperty ap = (ArrayProperty) p;
-            Property inner = ap.getItems();
-            return getSwaggerType(p) + "<" + getTypeDeclaration(inner) + ">";
-        } else if (p instanceof MapProperty) {
-            MapProperty mp = (MapProperty) p;
-            Property inner = mp.getAdditionalProperties();
-
-            return getSwaggerType(p) + "<string, " + getTypeDeclaration(inner) + ">";
+    public String getTypeDeclaration(Schema propertySchema) {
+        if (propertySchema instanceof ArraySchema) {
+            Schema inner = ((ArraySchema) propertySchema).getItems();
+            return String.format("%s<%s>", getSchemaType(propertySchema), getTypeDeclaration(inner));
+        } else if (propertySchema instanceof MapSchema && hasSchemaProperties(propertySchema)) {
+            Schema inner = (Schema) propertySchema.getAdditionalProperties();
+            return String.format("%s<string, %s>", getSchemaType(propertySchema), getTypeDeclaration(inner));
         }
-        return super.getTypeDeclaration(p);
+        return super.getTypeDeclaration(propertySchema);
     }
 
     @Override
@@ -686,6 +816,19 @@ public abstract class AbstractCSharpCodegen extends DefaultCodegen implements Co
     }
 
     @Override
+    public String toEnumValue(String value, String datatype) {
+        // C# only supports enums as literals for int, int?, long, long?, byte, and byte?. All else must be treated as strings.
+        // Per: https://docs.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/enum
+        // The approved types for an enum are byte, sbyte, short, ushort, int, uint, long, or ulong.
+        // but we're not supporting unsigned integral types or shorts.
+        if(datatype.startsWith("int") || datatype.startsWith("long") || datatype.startsWith("byte")) {
+            return value;
+        }
+
+        return escapeText(value);
+    }
+
+    @Override
     public String toEnumVarName(String name, String datatype) {
         if (name.length() == 0) {
             return "Empty";
@@ -715,32 +858,6 @@ public abstract class AbstractCSharpCodegen extends DefaultCodegen implements Co
         return sanitizeName(camelize(property.name)) + "Enum";
     }
 
-    /*
-    @Override
-    public String toEnumName(CodegenProperty property) {
-        String enumName = sanitizeName(property.name);
-        if (!StringUtils.isEmpty(modelNamePrefix)) {
-            enumName = modelNamePrefix + "_" + enumName;
-        }
-
-        if (!StringUtils.isEmpty(modelNameSuffix)) {
-            enumName = enumName + "_" + modelNameSuffix;
-        }
-
-        // model name cannot use reserved keyword, e.g. return
-        if (isReservedWord(enumName)) {
-            LOGGER.warn(enumName + " (reserved word) cannot be used as model name. Renamed to " + camelize("model_" + enumName));
-            enumName = "model_" + enumName; // e.g. return => ModelReturn (after camelize)
-        }
-
-        if (enumName.matches("\\d.*")) { // starts with number
-            return "_" + enumName;
-        } else {
-            return enumName;
-        }
-    }
-    */
-
     public String testPackageName() {
         return this.packageName + ".Test";
     }
@@ -755,5 +872,4 @@ public abstract class AbstractCSharpCodegen extends DefaultCodegen implements Co
     public String escapeUnsafeCharacters(String input) {
         return input.replace("*/", "*_/").replace("/*", "/_*").replace("--", "- -");
     }
-
 }

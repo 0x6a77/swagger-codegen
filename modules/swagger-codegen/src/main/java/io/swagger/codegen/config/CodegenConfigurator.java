@@ -5,14 +5,18 @@ import com.fasterxml.jackson.annotation.JsonAnySetter;
 import io.swagger.codegen.CliOption;
 import io.swagger.codegen.ClientOptInput;
 import io.swagger.codegen.ClientOpts;
+import io.swagger.codegen.CodegenArgument;
 import io.swagger.codegen.CodegenConfig;
 import io.swagger.codegen.CodegenConfigLoader;
 import io.swagger.codegen.CodegenConstants;
 import io.swagger.codegen.auth.AuthParser;
-import io.swagger.models.Swagger;
-import io.swagger.models.auth.AuthorizationValue;
-import io.swagger.parser.SwaggerParser;
-import io.swagger.util.Json;
+import io.swagger.parser.OpenAPIParser;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.core.util.Json;
+import io.swagger.v3.parser.core.models.AuthorizationValue;
+import io.swagger.v3.parser.core.models.ParseOptions;
+import io.swagger.v3.parser.core.models.SwaggerParseResult;
+import io.swagger.v3.parser.OpenAPIV3Parser;
 import org.apache.commons.lang3.Validate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +50,7 @@ public class CodegenConfigurator implements Serializable {
     private boolean skipOverwrite;
     private boolean removeOperationIdPrefix;
     private String templateDir;
+    private String templateVersion;
     private String auth;
     private String apiPackage;
     private String modelPackage;
@@ -57,6 +62,7 @@ public class CodegenConfigurator implements Serializable {
     private String artifactVersion;
     private String library;
     private String ignoreFileOverride;
+    private List<CodegenArgument> codegenArguments;
     private Map<String, String> systemProperties = new HashMap<String, String>();
     private Map<String, String> instantiationTypes = new HashMap<String, String>();
     private Map<String, String> typeMappings = new HashMap<String, String>();
@@ -170,6 +176,15 @@ public class CodegenConfigurator implements Serializable {
         }
 
         this.templateDir = f.getAbsolutePath();
+        return this;
+    }
+
+    public String getTemplateVersion() {
+        return templateVersion;
+    }
+
+    public CodegenConfigurator setTemplateVersion(String templateVersion) {
+        this.templateVersion = templateVersion;
         return this;
     }
 
@@ -401,6 +416,8 @@ public class CodegenConfigurator implements Serializable {
         config.languageSpecificPrimitives().addAll(languageSpecificPrimitives);
         config.reservedWordsMappings().putAll(reservedWordMappings);
 
+        config.setLanguageArguments(codegenArguments);
+
         checkAndSetAdditionalProperty(apiPackage, CodegenConstants.API_PACKAGE);
         checkAndSetAdditionalProperty(modelPackage, CodegenConstants.MODEL_PACKAGE);
         checkAndSetAdditionalProperty(invokerPackage, CodegenConstants.INVOKER_PACKAGE);
@@ -408,6 +425,7 @@ public class CodegenConfigurator implements Serializable {
         checkAndSetAdditionalProperty(artifactId, CodegenConstants.ARTIFACT_ID);
         checkAndSetAdditionalProperty(artifactVersion, CodegenConstants.ARTIFACT_VERSION);
         checkAndSetAdditionalProperty(templateDir, toAbsolutePathStr(templateDir), CodegenConstants.TEMPLATE_DIR);
+        checkAndSetAdditionalProperty(templateVersion, CodegenConstants.TEMPLATE_VERSION);
         checkAndSetAdditionalProperty(modelNamePrefix, CodegenConstants.MODEL_NAME_PREFIX);
         checkAndSetAdditionalProperty(modelNameSuffix, CodegenConstants.MODEL_NAME_SUFFIX);
         checkAndSetAdditionalProperty(gitUserId, CodegenConstants.GIT_USER_ID);
@@ -428,10 +446,73 @@ public class CodegenConfigurator implements Serializable {
 
         final List<AuthorizationValue> authorizationValues = AuthParser.parse(auth);
 
-        Swagger swagger = new SwaggerParser().read(inputSpec, authorizationValues, true);
+        ParseOptions options = new ParseOptions();
+        options.setResolve(true);
+        options.setFlatten(true);
+        SwaggerParseResult result = new OpenAPIParser().readLocation(inputSpec, authorizationValues, options);
+        OpenAPI openAPI = result.getOpenAPI();
 
         input.opts(new ClientOpts())
-                .swagger(swagger);
+                .openAPI(openAPI);
+
+        return input;
+    }
+
+    public ClientOptInput toClientOptInput(String content) {
+
+        Validate.notEmpty(lang, "language must be specified");
+
+        setVerboseFlags();
+        setSystemProperties();
+
+        CodegenConfig config = CodegenConfigLoader.forName(lang);
+
+        config.setOutputDir(outputDir);
+        config.setSkipOverwrite(skipOverwrite);
+        config.setIgnoreFilePathOverride(ignoreFileOverride);
+        config.setRemoveOperationIdPrefix(removeOperationIdPrefix);
+
+        config.instantiationTypes().putAll(instantiationTypes);
+        config.typeMapping().putAll(typeMappings);
+        config.importMapping().putAll(importMappings);
+        config.languageSpecificPrimitives().addAll(languageSpecificPrimitives);
+        config.reservedWordsMappings().putAll(reservedWordMappings);
+
+        config.setLanguageArguments(codegenArguments);
+
+        checkAndSetAdditionalProperty(apiPackage, CodegenConstants.API_PACKAGE);
+        checkAndSetAdditionalProperty(modelPackage, CodegenConstants.MODEL_PACKAGE);
+        checkAndSetAdditionalProperty(invokerPackage, CodegenConstants.INVOKER_PACKAGE);
+        checkAndSetAdditionalProperty(groupId, CodegenConstants.GROUP_ID);
+        checkAndSetAdditionalProperty(artifactId, CodegenConstants.ARTIFACT_ID);
+        checkAndSetAdditionalProperty(artifactVersion, CodegenConstants.ARTIFACT_VERSION);
+        checkAndSetAdditionalProperty(templateDir, toAbsolutePathStr(templateDir), CodegenConstants.TEMPLATE_DIR);
+        checkAndSetAdditionalProperty(templateVersion, CodegenConstants.TEMPLATE_VERSION);
+        checkAndSetAdditionalProperty(modelNamePrefix, CodegenConstants.MODEL_NAME_PREFIX);
+        checkAndSetAdditionalProperty(modelNameSuffix, CodegenConstants.MODEL_NAME_SUFFIX);
+        checkAndSetAdditionalProperty(gitUserId, CodegenConstants.GIT_USER_ID);
+        checkAndSetAdditionalProperty(gitRepoId, CodegenConstants.GIT_REPO_ID);
+        checkAndSetAdditionalProperty(releaseNote, CodegenConstants.RELEASE_NOTE);
+        checkAndSetAdditionalProperty(httpUserAgent, CodegenConstants.HTTP_USER_AGENT);
+
+        handleDynamicProperties(config);
+
+        if (isNotEmpty(library)) {
+            config.setLibrary(library);
+        }
+
+        config.additionalProperties().putAll(additionalProperties);
+
+        ClientOptInput input = new ClientOptInput()
+                .config(config);
+
+        final List<AuthorizationValue> authorizationValues = AuthParser.parse(auth);
+
+        SwaggerParseResult result = new OpenAPIParser().readContents(content, authorizationValues, null);
+        OpenAPI openAPI = result.getOpenAPI();
+
+        input.opts(new ClientOpts())
+                .openAPI(openAPI);
 
         return input;
     }
@@ -473,6 +554,10 @@ public class CodegenConfigurator implements Serializable {
         System.setProperty("debugModels", "");
         System.setProperty("debugOperations", "");
         System.setProperty("debugSupportingFiles", "");
+    }
+
+    public void setCodegenArguments(List<CodegenArgument> codegenArguments) {
+        this.codegenArguments = codegenArguments;
     }
 
     private void setSystemProperties() {

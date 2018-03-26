@@ -1,5 +1,5 @@
 #!/bin/sh
-# update java petstore for all supported http libraries
+# update # java petstore for all supported http libraries
 
 ./bin/java-petstore-jersey1.sh
 ./bin/java-petstore-jersey2.sh
@@ -16,3 +16,4 @@
 ./bin/java-petstore-resttemplate.sh
 ./bin/java-petstore-resttemplate-withxml.sh
 ./bin/java-petstore-resteasy.sh
+./bin/java-petstore-google-api-client.sh

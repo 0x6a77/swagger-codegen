@@ -2,7 +2,7 @@ package io.swagger.codegen.languages;
 
 import io.swagger.codegen.CliOption;
 import io.swagger.codegen.DefaultCodegen;
-import io.swagger.models.properties.BooleanProperty;
+import io.swagger.v3.parser.util.SchemaTypeUtil;
 import org.reflections.Reflections;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
@@ -35,10 +35,10 @@ public class BooleanOptionsTest {
         return codegenList.iterator();
     }
 
-    @Test(dataProvider = OPTIONS_PROVIDER)
+    @Test(enabled = false, dataProvider = OPTIONS_PROVIDER)
     public void booleanOptionsTest(DefaultCodegen codegen) {
         for (CliOption option : codegen.cliOptions()) {
-            if (option.getType().equals(BooleanProperty.TYPE)) {
+            if (option.getType().equals(SchemaTypeUtil.BOOLEAN_TYPE)) {
                 Assert.assertNotNull(option.getDefault());
                 Assert.assertTrue(option.getDefault().equals(Boolean.TRUE.toString()) ||
                         option.getDefault().equals(Boolean.FALSE.toString()));

@@ -1,179 +1,217 @@
 package io.swagger.codegen.cmd;
 
-import io.airlift.airline.Command;
-import io.airlift.airline.Option;
+import com.fasterxml.jackson.databind.JsonNode;
+import io.swagger.codegen.CLIHelper;
 import io.swagger.codegen.ClientOptInput;
-import io.swagger.codegen.CodegenConstants;
+import io.swagger.codegen.CodegenArgument;
 import io.swagger.codegen.DefaultGenerator;
 import io.swagger.codegen.config.CodegenConfigurator;
+import io.swagger.v3.core.util.Json;
+import io.swagger.v3.core.util.Yaml;
+import io.swagger.v3.parser.util.RemoteUrl;
+import org.apache.commons.beanutils.BeanUtils;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static io.swagger.codegen.config.CodegenConfiguratorUtils.*;
-import static org.apache.commons.lang3.StringUtils.isNotEmpty;
-
+import java.io.File;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+
+import static io.swagger.codegen.CLIHelper.isValidJson;
+import static io.swagger.codegen.CLIHelper.isValidURL;
+import static io.swagger.codegen.CLIHelper.isValidYaml;
+import static io.swagger.codegen.config.CodegenConfiguratorUtils.applyAdditionalPropertiesKvpList;
+import static io.swagger.codegen.config.CodegenConfiguratorUtils.applyImportMappingsKvpList;
+import static io.swagger.codegen.config.CodegenConfiguratorUtils.applyInstantiationTypesKvpList;
+import static io.swagger.codegen.config.CodegenConfiguratorUtils.applyLanguageSpecificPrimitivesCsvList;
+import static io.swagger.codegen.config.CodegenConfiguratorUtils.applyReservedWordsMappingsKvpList;
+import static io.swagger.codegen.config.CodegenConfiguratorUtils.applySystemPropertiesKvpList;
+import static io.swagger.codegen.config.CodegenConfiguratorUtils.applyTypeMappingsKvpList;
+import static org.apache.commons.lang3.StringUtils.isNotEmpty;
 
 /**
  * User: lanwen Date: 24.03.15 Time: 20:22
  */
 
-@Command(name = "generate", description = "Generate code with chosen lang")
 public class Generate implements Runnable {
 
     public static final Logger LOG = LoggerFactory.getLogger(Generate.class);
 
-    @Option(name = {"-v", "--verbose"}, description = "verbose mode")
-    private Boolean verbose;
+    protected Boolean verbose;
+    protected String lang;
+    protected String output = "";
+    protected String spec;
+    protected String templateDir;
+    protected String templateVersion;
+    protected String auth;
+    protected List<String> systemProperties = new ArrayList<>();
+    protected String configFile;
+    protected Boolean skipOverwrite;
+    protected String apiPackage;
+    protected String modelPackage;
+    protected String modelNamePrefix;
+    protected String modelNameSuffix;
+    protected List<String> instantiationTypes = new ArrayList<>();
+    protected List<String> typeMappings = new ArrayList<>();
+    protected List<String> additionalProperties = new ArrayList<>();
+    protected List<String> languageSpecificPrimitives = new ArrayList<>();
+    protected List<String> importMappings = new ArrayList<>();
+    protected String invokerPackage;
+    protected String groupId;
+    protected String artifactId;
+    protected String artifactVersion;
+    protected String library;
+    protected String gitUserId;
+    protected String gitRepoId;
+    protected String releaseNote;
+    protected String httpUserAgent;
+    protected List<String> reservedWordsMappings = new ArrayList<>();
+    protected String ignoreFileOverride;
+    protected Boolean removeOperationIdPrefix;
+    private String url;
+    private List<CodegenArgument> codegenArguments;
 
-    @Option(name = {"-l", "--lang"}, title = "language", required = true,
-            description = "client language to generate (maybe class name in classpath, required)")
-    private String lang;
+    public void setVerbose(Boolean verbose) {
+        this.verbose = verbose;
+    }
 
-    @Option(name = {"-o", "--output"}, title = "output directory",
-            description = "where to write the generated files (current dir by default)")
-    private String output = "";
+    public void setLang(String lang) {
+        this.lang = lang;
+    }
 
-    @Option(name = {"-i", "--input-spec"}, title = "spec file", required = true,
-            description = "location of the swagger spec, as URL or file (required)")
-    private String spec;
+    public void setOutput(String output) {
+        this.output = output;
+    }
 
-    @Option(name = {"-t", "--template-dir"}, title = "template directory",
-            description = "folder containing the template files")
-    private String templateDir;
+    public void setSpec(String spec) {
+        this.spec = spec;
+    }
 
-    @Option(
-            name = {"-a", "--auth"},
-            title = "authorization",
-            description = "adds authorization headers when fetching the swagger definitions remotely. "
-                    + "Pass in a URL-encoded string of name:header with a comma separating multiple values")
-    private String auth;
+    public void setTemplateDir(String templateDir) {
+        this.templateDir = templateDir;
+    }
 
-    @Option(
-            name = {"-D"},
-            title = "system properties",
-            description = "sets specified system properties in "
-                    + "the format of name=value,name=value (or multiple options, each with name=value)")
-    private List<String> systemProperties = new ArrayList<>();
+    public void setTemplateVersion(String templateVersion) {
+        this.templateVersion = templateVersion;
+    }
 
-    @Option(
-            name = {"-c", "--config"},
-            title = "configuration file",
-            description = "Path to json configuration file. "
-                    + "File content should be in a json format {\"optionKey\":\"optionValue\", \"optionKey1\":\"optionValue1\"...} "
-                    + "Supported options can be different for each language. Run config-help -l {lang} command for language specific config options.")
-    private String configFile;
+    public void setAuth(String auth) {
+        this.auth = auth;
+    }
 
-    @Option(name = {"-s", "--skip-overwrite"}, title = "skip overwrite",
-            description = "specifies if the existing files should be "
-                    + "overwritten during the generation.")
-    private Boolean skipOverwrite;
+    public void setSystemProperties(List<String> systemProperties) {
+        this.systemProperties = systemProperties;
+    }
 
-    @Option(name = {"--api-package"}, title = "api package",
-            description = CodegenConstants.API_PACKAGE_DESC)
-    private String apiPackage;
+    public void setConfigFile(String configFile) {
+        this.configFile = configFile;
+    }
 
-    @Option(name = {"--model-package"}, title = "model package",
-            description = CodegenConstants.MODEL_PACKAGE_DESC)
-    private String modelPackage;
+    public void setSkipOverwrite(Boolean skipOverwrite) {
+        this.skipOverwrite = skipOverwrite;
+    }
 
-    @Option(name = {"--model-name-prefix"}, title = "model name prefix",
-            description = CodegenConstants.MODEL_NAME_PREFIX_DESC)
-    private String modelNamePrefix;
+    public void setApiPackage(String apiPackage) {
+        this.apiPackage = apiPackage;
+    }
 
-    @Option(name = {"--model-name-suffix"}, title = "model name suffix",
-            description = CodegenConstants.MODEL_NAME_SUFFIX_DESC)
-    private String modelNameSuffix;
+    public void setModelPackage(String modelPackage) {
+        this.modelPackage = modelPackage;
+    }
 
-    @Option(
-            name = {"--instantiation-types"},
-            title = "instantiation types",
-            description = "sets instantiation type mappings in the format of type=instantiatedType,type=instantiatedType."
-                    + "For example (in Java): array=ArrayList,map=HashMap. In other words array types will get instantiated as ArrayList in generated code."
-                    + " You can also have multiple occurrences of this option.")
-    private List<String> instantiationTypes = new ArrayList<>();
+    public void setModelNamePrefix(String modelNamePrefix) {
+        this.modelNamePrefix = modelNamePrefix;
+    }
 
-    @Option(
-            name = {"--type-mappings"},
-            title = "type mappings",
-            description = "sets mappings between swagger spec types and generated code types "
-                    + "in the format of swaggerType=generatedType,swaggerType=generatedType. For example: array=List,map=Map,string=String."
-                    + " You can also have multiple occurrences of this option.")
-    private List<String> typeMappings = new ArrayList<>();
+    public void setModelNameSuffix(String modelNameSuffix) {
+        this.modelNameSuffix = modelNameSuffix;
+    }
 
-    @Option(
-            name = {"--additional-properties"},
-            title = "additional properties",
-            description = "sets additional properties that can be referenced by the mustache templates in the format of name=value,name=value."
-                    + " You can also have multiple occurrences of this option.")
-    private List<String> additionalProperties = new ArrayList<>();
+    public void setInstantiationTypes(List<String> instantiationTypes) {
+        this.instantiationTypes = instantiationTypes;
+    }
 
-    @Option(
-            name = {"--language-specific-primitives"},
-            title = "language specific primitives",
-            description = "specifies additional language specific primitive types in the format of type1,type2,type3,type3. For example: String,boolean,Boolean,Double."
-                    + " You can also have multiple occurrences of this option.")
-    private List<String> languageSpecificPrimitives = new ArrayList<>();
+    public void setTypeMappings(List<String> typeMappings) {
+        this.typeMappings = typeMappings;
+    }
 
-    @Option(
-            name = {"--import-mappings"},
-            title = "import mappings",
-            description = "specifies mappings between a given class and the import that should be used for that class in the format of type=import,type=import."
-                    + " You can also have multiple occurrences of this option.")
-    private List<String> importMappings = new ArrayList<>();
+    public void setAdditionalProperties(List<String> additionalProperties) {
+        this.additionalProperties = additionalProperties;
+    }
 
-    @Option(name = {"--invoker-package"}, title = "invoker package",
-            description = CodegenConstants.INVOKER_PACKAGE_DESC)
-    private String invokerPackage;
+    public void setLanguageSpecificPrimitives(List<String> languageSpecificPrimitives) {
+        this.languageSpecificPrimitives = languageSpecificPrimitives;
+    }
 
-    @Option(name = {"--group-id"}, title = "group id", description = CodegenConstants.GROUP_ID_DESC)
-    private String groupId;
+    public void setImportMappings(List<String> importMappings) {
+        this.importMappings = importMappings;
+    }
 
-    @Option(name = {"--artifact-id"}, title = "artifact id",
-            description = CodegenConstants.ARTIFACT_ID_DESC)
-    private String artifactId;
+    public void setInvokerPackage(String invokerPackage) {
+        this.invokerPackage = invokerPackage;
+    }
 
-    @Option(name = {"--artifact-version"}, title = "artifact version",
-            description = CodegenConstants.ARTIFACT_VERSION_DESC)
-    private String artifactVersion;
+    public void setGroupId(String groupId) {
+        this.groupId = groupId;
+    }
 
-    @Option(name = {"--library"}, title = "library", description = CodegenConstants.LIBRARY_DESC)
-    private String library;
+    public void setArtifactId(String artifactId) {
+        this.artifactId = artifactId;
+    }
 
-    @Option(name = {"--git-user-id"}, title = "git user id",
-            description = CodegenConstants.GIT_USER_ID_DESC)
-    private String gitUserId;
+    public void setArtifactVersion(String artifactVersion) {
+        this.artifactVersion = artifactVersion;
+    }
 
-    @Option(name = {"--git-repo-id"}, title = "git repo id",
-            description = CodegenConstants.GIT_REPO_ID_DESC)
-    private String gitRepoId;
+    public void setLibrary(String library) {
+        this.library = library;
+    }
 
-    @Option(name = {"--release-note"}, title = "release note",
-            description = CodegenConstants.RELEASE_NOTE_DESC)
-    private String releaseNote;
+    public void setGitUserId(String gitUserId) {
+        this.gitUserId = gitUserId;
+    }
 
-    @Option(name = {"--http-user-agent"}, title = "http user agent",
-            description = CodegenConstants.HTTP_USER_AGENT_DESC)
-    private String httpUserAgent;
+    public void setGitRepoId(String gitRepoId) {
+        this.gitRepoId = gitRepoId;
+    }
 
-    @Option(
-            name = {"--reserved-words-mappings"},
-            title = "reserved word mappings",
-            description = "specifies how a reserved name should be escaped to. Otherwise, the default _<name> is used. For example id=identifier."
-                    + " You can also have multiple occurrences of this option.")
-    private List<String> reservedWordsMappings = new ArrayList<>();
+    public void setReleaseNote(String releaseNote) {
+        this.releaseNote = releaseNote;
+    }
 
-    @Option(name = {"--ignore-file-override"}, title = "ignore file override location",
-            description = CodegenConstants.IGNORE_FILE_OVERRIDE_DESC)
-    private String ignoreFileOverride;
+    public void setHttpUserAgent(String httpUserAgent) {
+        this.httpUserAgent = httpUserAgent;
+    }
 
-    @Option(name = {"--remove-operation-id-prefix"}, title = "remove prefix of the operationId",
-            description = CodegenConstants.REMOVE_OPERATION_ID_PREFIX_DESC)
-    private Boolean removeOperationIdPrefix;
+    public void setReservedWordsMappings(List<String> reservedWordsMappings) {
+        this.reservedWordsMappings = reservedWordsMappings;
+    }
+
+    public void setIgnoreFileOverride(String ignoreFileOverride) {
+        this.ignoreFileOverride = ignoreFileOverride;
+    }
+
+    public void setRemoveOperationIdPrefix(Boolean removeOperationIdPrefix) {
+        this.removeOperationIdPrefix = removeOperationIdPrefix;
+    }
+
+    public void setUrl(String url) {
+        this.url = url;
+    }
+
+    public void setCodegenArguments(List<CodegenArgument> codegenArguments) {
+        this.codegenArguments = codegenArguments;
+    }
 
     @Override
     public void run() {
+
+        loadArguments();
 
         // attempt to read from config file
         CodegenConfigurator configurator = CodegenConfigurator.fromFile(configFile);
@@ -211,6 +249,10 @@ public class Generate implements Runnable {
 
         if (isNotEmpty(templateDir)) {
             configurator.setTemplateDir(templateDir);
+        }
+
+        if (isNotEmpty(templateVersion)) {
+            configurator.setTemplateVersion(templateVersion);
         }
 
         if (isNotEmpty(apiPackage)) {
@@ -273,6 +315,10 @@ public class Generate implements Runnable {
             configurator.setRemoveOperationIdPrefix(removeOperationIdPrefix);
         }
 
+        if (codegenArguments != null && !codegenArguments.isEmpty()) {
+            configurator.setCodegenArguments(codegenArguments);
+        }
+
         applySystemPropertiesKvpList(systemProperties, configurator);
         applyInstantiationTypesKvpList(instantiationTypes, configurator);
         applyImportMappingsKvpList(importMappings, configurator);
@@ -283,5 +329,63 @@ public class Generate implements Runnable {
         final ClientOptInput clientOptInput = configurator.toClientOptInput();
 
         new DefaultGenerator().opts(clientOptInput).generate();
+    }
+
+    private void loadArguments() {
+        if (StringUtils.isBlank(this.url)) {
+            return;
+        }
+        final String content;
+        File file = new File(this.url);
+        if (file.exists() && file.isFile()) {
+            try {
+                content = FileUtils.readFileToString(file);
+            } catch (IOException e) {
+                LOG.error("Unable to read file: " + this.url, e);
+                return;
+            }
+        } else if (isValidURL(this.url)) {
+            try {
+                content = RemoteUrl.urlToString(this.url, null);
+            } catch (Exception e) {
+                LOG.error("Unable to read url: " + this.url, e);
+                return;
+            }
+        } else {
+            return;
+        }
+
+        if (StringUtils.isBlank(content)) {
+            return;
+        }
+
+        JsonNode node = null;
+
+        if (isValidJson(content)) {
+            try {
+                node = Json.mapper().readTree(content.getBytes());
+            } catch (IOException e) {
+                LOG.error("Unable to deserialize json from: " + this.url, e);
+                node = null;
+            }
+        } else if (isValidYaml(content)) {
+            try {
+                node = Yaml.mapper().readTree(content.getBytes());
+            } catch (IOException e) {
+                LOG.error("Unable to deserialize yaml from: " + this.url, e);
+                node = null;
+            }
+        }
+
+        if (node == null) {
+            return;
+        }
+
+        final Map<String, Object> optionValueMap = CLIHelper.createOptionValueMap(node);
+        try {
+            BeanUtils.populate(this, optionValueMap);
+        } catch (Exception e) {
+            LOG.error("Error setting values to object.", e);
+        }
     }
 }

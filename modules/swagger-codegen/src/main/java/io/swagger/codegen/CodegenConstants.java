@@ -1,9 +1,24 @@
 package io.swagger.codegen;
 
+import static io.swagger.codegen.VendorExtendable.PREFIX_HAS;
+import static io.swagger.codegen.VendorExtendable.PREFIX_IS;
+
 /**
  * A class for storing constants that are used throughout the project.
  */
 public class CodegenConstants {
+    /* System Properties */
+    // NOTE: We may want to move these to a separate class to avoid confusion or modification.
+    public static final String APIS = "apis";
+    public static final String MODELS = "models";
+    public static final String SUPPORTING_FILES = "supportingFiles";
+    public static final String MODEL_TESTS = "modelTests";
+    public static final String MODEL_DOCS = "modelDocs";
+    public static final String API_TESTS = "apiTests";
+    public static final String API_DOCS = "apiDocs";
+    public static final String WITH_XML = "withXml";
+    /* /end System Properties */
+
     public static final String API_PACKAGE = "apiPackage";
     public static final String API_PACKAGE_DESC = "package for generated api classes";
 
@@ -11,6 +26,7 @@ public class CodegenConstants {
     public static final String MODEL_PACKAGE_DESC = "package for generated models";
 
     public static final String TEMPLATE_DIR = "templateDir";
+    public static final String TEMPLATE_VERSION = "templateVersion";
 
     public static final String ALLOW_UNICODE_IDENTIFIERS = "allowUnicodeIdentifiers";
     public static final String ALLOW_UNICODE_IDENTIFIERS_DESC = "boolean, toggles whether unicode identifiers are allowed in names or not, default is false";
@@ -146,6 +162,10 @@ public class CodegenConstants {
     public static final String DOTNET_FRAMEWORK_DESC = "The target .NET framework version.";
 
     public static enum MODEL_PROPERTY_NAMING_TYPE {camelCase, PascalCase, snake_case, original}
+    public static enum ENUM_PROPERTY_NAMING_TYPE {camelCase, PascalCase, snake_case, original, UPPERCASE}
+
+    public static final String ENUM_PROPERTY_NAMING = "enumPropertyNaming";
+    public static final String ENUM_PROPERTY_NAMING_DESC = "Naming convention for enum properties: 'camelCase', 'PascalCase', 'snake_case', 'UPPERCASE', and 'original'";
 
     public static final String MODEL_NAME_PREFIX = "modelNamePrefix";
     public static final String MODEL_NAME_PREFIX_DESC = "Prefix that will be prepended to all model names. Default is the empty string.";
@@ -171,6 +191,9 @@ public class CodegenConstants {
     public static final String SUPPORTS_ES6 = "supportsES6";
     public static final String SUPPORTS_ES6_DESC = "Generate code that conforms to ES6.";
 
+    public static final String SUPPORTS_ASYNC = "supportsAsync";
+    public static final String SUPPORTS_ASYNC_DESC = "Generate code that supports async operations.";
+
     public static final String EXCLUDE_TESTS = "excludeTests";
     public static final String EXCLUDE_TESTS_DESC = "Specifies that no tests are to be generated.";
 
@@ -195,9 +218,95 @@ public class CodegenConstants {
     public static final String NON_PUBLIC_API = "nonPublicApi";
     public static final String NON_PUBLIC_API_DESC = "Generates code with reduced access modifiers; allows embedding elsewhere without exposing non-public API calls to consumers.";
 
+    public static final String VALIDATABLE = "validatable";
+    public static final String VALIDATABLE_DESC = "Generates self-validatable models.";
+
     public static final String IGNORE_FILE_OVERRIDE = "ignoreFileOverride";
     public static final String IGNORE_FILE_OVERRIDE_DESC = "Specifies an override location for the .swagger-codegen-ignore file. Most useful on initial generation.";
 
     public static final String REMOVE_OPERATION_ID_PREFIX = "removeOperationIdPrefix";
     public static final String REMOVE_OPERATION_ID_PREFIX_DESC = "Remove prefix of operationId, e.g. config_getId => getId";
+
+    public static final String IS_ENUM_EXT_NAME = PREFIX_IS + "enum";
+    public static final String IS_ALIAS_EXT_NAME = PREFIX_IS + "alias";
+    public static final String IS_ARRAY_MODEL_EXT_NAME = PREFIX_IS + "array-model";
+    public static final String HAS_VARS_EXT_NAME = PREFIX_HAS + "vars";
+    public static final String HAS_ENUMS_EXT_NAME = PREFIX_HAS + "enums";
+    public static final String HAS_MORE_MODELS_EXT_NAME = PREFIX_HAS + "more-models";
+    public static final String HAS_REQUIRED_EXT_NAME = PREFIX_HAS + "required";
+    public static final String HAS_OPTIONAL_EXT_NAME = PREFIX_HAS + "optional";
+    public static final String HAS_CHILDREN_EXT_NAME = PREFIX_HAS + "children";
+    public static final String HAS_ONLY_READ_ONLY_EXT_NAME = PREFIX_HAS + "only-read-only";
+
+    public static final String IS_SIMPLE_TYPE_EXT_NAME = PREFIX_IS + "simple-type";
+    public static final String IS_PRIMITIVE_TYPE_EXT_NAME = PREFIX_IS + "primitive-type";
+    public static final String IS_CONTAINER_EXT_NAME = PREFIX_IS + "container";
+    public static final String IS_NOT_CONTAINER_EXT_NAME = PREFIX_IS + "not-container";
+    public static final String IS_DEFAULT_EXT_NAME = PREFIX_IS + "default";
+    public static final String IS_STRING_EXT_NAME = PREFIX_IS + "string";
+    public static final String IS_NUMERIC_EXT_NAME = PREFIX_IS + "numeric";
+    public static final String IS_INTEGER_EXT_NAME = PREFIX_IS + "integer";
+    public static final String IS_LONG_EXT_NAME = PREFIX_IS + "long";
+    public static final String IS_NUMBER_EXT_NAME = PREFIX_IS + "number";
+    public static final String IS_FLOAT_EXT_NAME = PREFIX_IS + "float";
+    public static final String IS_DOUBLE_EXT_NAME = PREFIX_IS + "double";
+    public static final String IS_BYTE_ARRAY_EXT_NAME = PREFIX_IS + "byte-array";
+    public static final String IS_BINARY_EXT_NAME = PREFIX_IS + "binary";
+    public static final String IS_FILE_EXT_NAME = PREFIX_IS + "file";
+    public static final String IS_BOOLEAN_EXT_NAME = PREFIX_IS + "boolean";
+    public static final String IS_DATE_EXT_NAME = PREFIX_IS + "date";
+    public static final String IS_DATE_TIME_EXT_NAME = PREFIX_IS + "date-time";
+    public static final String IS_UUID_EXT_NAME = PREFIX_IS + "uuid";
+    public static final String IS_LIST_CONTAINER_EXT_NAME = PREFIX_IS + "list-container";
+    public static final String IS_MAP_CONTAINER_EXT_NAME = PREFIX_IS + "map-container";
+    public static final String IS_READ_ONLY_EXT_NAME = PREFIX_IS + "read-only";
+    public static final String IS_INHERITED_EXT_NAME = PREFIX_IS + "inherited";
+    public static final String IS_XML_ATTRIBUTE_EXT_NAME = PREFIX_IS + "xml-attribute";
+    public static final String IS_XML_WRAPPED_EXT_NAME = PREFIX_IS + "xml-wrapped";
+    public static final String IS_MULTIPART_EXT_NAME = PREFIX_IS + "multipart";
+    public static final String IS_RESPONSE_BINARY_EXT_NAME = PREFIX_IS + "response-binary";
+    public static final String IS_RESPONSE_FILE_EXT_NAME = PREFIX_IS + "response-file";
+    public static final String IS_RESTFUL_INDEX_EXT_NAME = PREFIX_IS + "restful-index";
+    public static final String IS_RESTFUL_SHOW_EXT_NAME = PREFIX_IS + "restful-show";
+    public static final String IS_RESTFUL_CREATE_EXT_NAME = PREFIX_IS + "restful-create";
+    public static final String IS_RESTFUL_UPDATE_EXT_NAME = PREFIX_IS + "restful-update";
+    public static final String IS_RESTFUL_DESTROY_EXT_NAME = PREFIX_IS + "restful-destroy";
+    public static final String IS_RESTFUL_EXT_NAME = PREFIX_IS + "restful";
+    public static final String IS_DEPRECATED_EXT_NAME = PREFIX_IS + "deprecated";
+
+    public static final String IS_FORM_PARAM_EXT_NAME = PREFIX_IS + "form-param";
+    public static final String IS_QUERY_PARAM_EXT_NAME = PREFIX_IS + "query-param";
+    public static final String IS_PATH_PARAM_EXT_NAME = PREFIX_IS + "path-param";
+    public static final String IS_HEADER_PARAM_EXT_NAME = PREFIX_IS + "header-param";
+    public static final String IS_COOKIE_PARAM_EXT_NAME = PREFIX_IS + "cookie-param";
+    public static final String IS_BODY_PARAM_EXT_NAME = PREFIX_IS + "body-param";
+    public static final String IS_COLLECTION_FORMAT_MULTI_EXT_NAME = PREFIX_IS + "collection-format-multi";
+
+    public static final String IS_BASIC_EXT_NAME = PREFIX_IS + "basic";
+    public static final String IS_OAUTH_EXT_NAME = PREFIX_IS + "oauth";
+    public static final String IS_API_KEY_EXT_NAME = PREFIX_IS + "api-key";
+    public static final String IS_KEY_IN_QUERY_EXT_NAME = PREFIX_IS + "key-in-query";
+    public static final String IS_KEY_IN_HEADER_EXT_NAME = PREFIX_IS + "key-in-header";
+    public static final String IS_CODE_EXT_NAME = PREFIX_IS + "code";
+    public static final String IS_PASSWORD_EXT_NAME = PREFIX_IS + "password";
+    public static final String IS_APPLICATION_EXT_NAME = PREFIX_IS + "application";
+    public static final String IS_IMPLICIT_EXT_NAME = PREFIX_IS + "implicit";
+
+    public static final String HAS_MORE_EXT_NAME = PREFIX_HAS + "more";
+    public static final String HAS_MORE_NON_READ_ONLY_EXT_NAME = PREFIX_HAS + "more-non-read-only";
+    public static final String HAS_VALIDATION_EXT_NAME = PREFIX_HAS + "validation";
+    public static final String HAS_AUTH_METHODS_EXT_NAME = PREFIX_HAS + "auth-methods";
+    public static final String HAS_CONSUMES_EXT_NAME = PREFIX_HAS + "consumes";
+    public static final String HAS_PRODUCES_EXT_NAME = PREFIX_HAS + "produces";
+    public static final String HAS_PARAMS_EXT_NAME = PREFIX_HAS + "params";
+    public static final String HAS_OPTIONAL_PARAMS_EXT_NAME = PREFIX_HAS + "optional-params";
+    public static final String HAS_REQUIRED_PARAMS_EXT_NAME = PREFIX_HAS + "required-params";
+    public static final String HAS_REFERENCE_EXT_NAME = PREFIX_HAS + "reference";
+    public static final String HAS_HEADERS_EXT_NAME = PREFIX_HAS + "headers";
+
+    public static final String MODEL_DOCS_OPTION = "--model-docs";
+    public static final String API_DOCS_OPTION = "--api-docs";
+    public static final String MODEL_TESTS_OPTION = "--model-tests";
+    public static final String API_TESTS_OPTION = "--api-tests";
+
 }

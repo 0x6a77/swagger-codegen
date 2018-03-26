@@ -6,20 +6,14 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import com.samskivert.mustache.Escapers;
+import com.samskivert.mustache.Mustache;
 import io.swagger.codegen.CliOption;
 import io.swagger.codegen.CodegenConstants;
 import io.swagger.codegen.DefaultCodegen;
-import io.swagger.models.properties.ArrayProperty;
-import io.swagger.models.properties.BooleanProperty;
-import io.swagger.models.properties.DateProperty;
-import io.swagger.models.properties.DateTimeProperty;
-import io.swagger.models.properties.DoubleProperty;
-import io.swagger.models.properties.FloatProperty;
-import io.swagger.models.properties.IntegerProperty;
-import io.swagger.models.properties.LongProperty;
-import io.swagger.models.properties.MapProperty;
-import io.swagger.models.properties.Property;
-import io.swagger.models.properties.StringProperty;
+import io.swagger.v3.oas.models.media.ArraySchema;
+import io.swagger.v3.oas.models.media.MapSchema;
+import io.swagger.v3.oas.models.media.Schema;
 import org.apache.commons.lang3.StringUtils;
 
 public abstract class AbstractScalaCodegen extends DefaultCodegen {
@@ -43,7 +37,50 @@ public abstract class AbstractScalaCodegen extends DefaultCodegen {
                 "Any",
                 "List",
                 "Seq",
-                "Map"));
+                "Map",
+                "Array"));
+
+        reservedWords.addAll(Arrays.asList(
+                "abstract",
+                "case",
+                "catch",
+                "class",
+                "def",
+                "do",
+                "else",
+                "extends",
+                "false",
+                "final",
+                "finally",
+                "for",
+                "forSome",
+                "if",
+                "implicit",
+                "import",
+                "lazy",
+                "match",
+                "new",
+                "null",
+                "object",
+                "override",
+                "package",
+                "private",
+                "protected",
+                "return",
+                "sealed",
+                "super",
+                "this",
+                "throw",
+                "trait",
+                "try",
+                "true",
+                "type",
+                "val",
+                "var",
+                "while",
+                "with",
+                "yield"
+        ));
 
         cliOptions.add(new CliOption(CodegenConstants.MODEL_PACKAGE, CodegenConstants.MODEL_PACKAGE_DESC));
         cliOptions.add(new CliOption(CodegenConstants.API_PACKAGE, CodegenConstants.API_PACKAGE_DESC));
@@ -72,7 +109,30 @@ public abstract class AbstractScalaCodegen extends DefaultCodegen {
         if (this.reservedWordsMappings().containsKey(name)) {
             return this.reservedWordsMappings().get(name);
         }
-        return "_" + name;
+        // Reserved words will be further escaped at the mustache compiler level.
+        // Scala escaping done here (via `, without compiler escaping) would otherwise be HTML encoded.
+        return "`" + name + "`";
+    }
+
+    @Override
+    public Mustache.Compiler processCompiler(Mustache.Compiler compiler) {
+        Mustache.Escaper SCALA = new Mustache.Escaper() {
+            @Override public String escape (String text) {
+                // Fix included as suggested by akkie in #6393
+                // The given text is a reserved word which is escaped by enclosing it with grave accents. If we would
+                // escape that with the default Mustache `HTML` escaper, then the escaper would also escape our grave
+                // accents. So we remove the grave accents before the escaping and add it back after the escaping.
+                if (text.startsWith("`") && text.endsWith("`")) {
+                    String unescaped =  text.substring(1, text.length() - 1);
+                    return "`" + Escapers.HTML.escape(unescaped) + "`";
+                }
+
+                // All none reserved words will be escaped with the default Mustache `HTML` escaper
+                return Escapers.HTML.escape(text);
+            }
+        };
+
+        return compiler.withEscaper(SCALA);
     }
 
     @Override
@@ -86,76 +146,53 @@ public abstract class AbstractScalaCodegen extends DefaultCodegen {
     }
 
     @Override
-    public String getTypeDeclaration(Property p) {
-        if (p instanceof ArrayProperty) {
-            ArrayProperty ap = (ArrayProperty) p;
-            Property inner = ap.getItems();
-            return getSwaggerType(p) + "[" + getTypeDeclaration(inner) + "]";
-        } else if (p instanceof MapProperty) {
-            MapProperty mp = (MapProperty) p;
-            Property inner = mp.getAdditionalProperties();
-
-            return getSwaggerType(p) + "[String, " + getTypeDeclaration(inner) + "]";
+    public String getTypeDeclaration(Schema propertySchema) {
+        if (propertySchema instanceof ArraySchema) {
+            Schema inner = ((ArraySchema) propertySchema).getItems();
+            return String.format("%s[%s]", getSchemaType(propertySchema), getTypeDeclaration(inner));
+        } else if (propertySchema instanceof MapSchema && hasSchemaProperties(propertySchema)) {
+            Schema inner = (Schema) propertySchema.getAdditionalProperties();
+            return String.format("%s[String, %s]", getSchemaType(propertySchema), getTypeDeclaration(inner));
         }
-        return super.getTypeDeclaration(p);
+        return super.getTypeDeclaration(propertySchema);
     }
 
     @Override
-    public String getSwaggerType(Property p) {
-        String swaggerType = super.getSwaggerType(p);
+    public String getSchemaType(Schema propertySchema) {
+        String swaggerType = super.getSchemaType(propertySchema);
         String type = null;
         if (typeMapping.containsKey(swaggerType)) {
             type = typeMapping.get(swaggerType);
-            if (languageSpecificPrimitives.contains(type)) {
-                return toModelName(type);
-            }
-        } else {
+            if (languageSpecificPrimitives.contains(type))
+                return (type);
+        } else
             type = swaggerType;
-        }
-        return toModelName(type);
+        return type;
     }
 
     @Override
-    public String toInstantiationType(Property p) {
-        if (p instanceof MapProperty) {
-            MapProperty ap = (MapProperty) p;
-            String inner = getSwaggerType(ap.getAdditionalProperties());
-            return instantiationTypes.get("map") + "[String, " + inner + "]";
-        } else if (p instanceof ArrayProperty) {
-            ArrayProperty ap = (ArrayProperty) p;
-            String inner = getSwaggerType(ap.getItems());
-            return instantiationTypes.get("array") + "[" + inner + "]";
+    public String toInstantiationType(Schema schemaProperty) {
+        if (schemaProperty instanceof MapSchema && hasSchemaProperties(schemaProperty)) {
+            String inner = getSchemaType((Schema) schemaProperty.getAdditionalProperties());
+            return String.format("%s[%s]", instantiationTypes.get("map"), inner);
+        } else if (schemaProperty instanceof ArraySchema) {
+            ArraySchema arraySchema = (ArraySchema) schemaProperty;
+            String inner = getSchemaType(arraySchema.getItems());
+            return String.format("%s[%s]", instantiationTypes.get("array"), inner);
         } else {
             return null;
         }
     }
 
     @Override
-    public String toDefaultValue(Property p) {
-        if (p instanceof StringProperty) {
-            return "null";
-        } else if (p instanceof BooleanProperty) {
-            return "null";
-        } else if (p instanceof DateProperty) {
-            return "null";
-        } else if (p instanceof DateTimeProperty) {
-            return "null";
-        } else if (p instanceof DoubleProperty) {
-            return "null";
-        } else if (p instanceof FloatProperty) {
-            return "null";
-        } else if (p instanceof IntegerProperty) {
-            return "null";
-        } else if (p instanceof LongProperty) {
-            return "null";
-        } else if (p instanceof MapProperty) {
-            MapProperty ap = (MapProperty) p;
-            String inner = getSwaggerType(ap.getAdditionalProperties());
-            return "new HashMap[String, " + inner + "]() ";
-        } else if (p instanceof ArrayProperty) {
-            ArrayProperty ap = (ArrayProperty) p;
-            String inner = getSwaggerType(ap.getItems());
-            return "new ListBuffer[" + inner + "]() ";
+    public String toDefaultValue(Schema propertySchema) {
+        if (propertySchema instanceof MapSchema && hasSchemaProperties(propertySchema)) {
+            String inner = getSchemaType((Schema) propertySchema.getAdditionalProperties());
+            return String.format("new HashMap[String, %s]()", inner);
+        } else if(propertySchema instanceof ArraySchema) {
+            ArraySchema arraySchema = (ArraySchema) propertySchema;
+            String inner = getSchemaType(arraySchema.getItems());
+            return String.format("new ListBuffer[%s]()", inner);
         } else {
             return "null";
         }

@@ -9,7 +9,6 @@ import io.swagger.codegen.CodegenProperty;
 import io.swagger.codegen.CodegenType;
 import io.swagger.codegen.DefaultCodegen;
 import io.swagger.codegen.SupportingFile;
-import io.swagger.models.properties.*;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -19,9 +18,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import io.swagger.v3.oas.models.media.ArraySchema;
+import io.swagger.v3.oas.models.media.BooleanSchema;
+import io.swagger.v3.oas.models.media.DateSchema;
+import io.swagger.v3.oas.models.media.DateTimeSchema;
+import io.swagger.v3.oas.models.media.MapSchema;
+import io.swagger.v3.oas.models.media.Schema;
+import io.swagger.v3.oas.models.media.StringSchema;
 import org.apache.commons.lang3.StringUtils;
 
-import javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
+import static io.swagger.codegen.languages.helpers.ExtensionHelper.getBooleanValue;
 
 public class PythonClientCodegen extends DefaultCodegen implements CodegenConfig {
     public static final String PACKAGE_URL = "packageUrl";
@@ -67,6 +73,7 @@ public class PythonClientCodegen extends DefaultCodegen implements CodegenConfig
         languageSpecificPrimitives.add("int");
         languageSpecificPrimitives.add("float");
         languageSpecificPrimitives.add("list");
+        languageSpecificPrimitives.add("dict");
         languageSpecificPrimitives.add("bool");
         languageSpecificPrimitives.add("str");
         languageSpecificPrimitives.add("datetime");
@@ -189,21 +196,16 @@ public class PythonClientCodegen extends DefaultCodegen implements CodegenConfig
             setPackageUrl((String) additionalProperties.get(PACKAGE_URL));
         }
 
-        String swaggerFolder = packageName;
-
-        modelPackage = swaggerFolder + File.separatorChar + "models";
-        apiPackage = swaggerFolder + File.separatorChar + "apis";
-
         supportingFiles.add(new SupportingFile("README.mustache", "", "README.md"));
 
         supportingFiles.add(new SupportingFile("tox.mustache", "", "tox.ini"));
         supportingFiles.add(new SupportingFile("test-requirements.mustache", "", "test-requirements.txt"));
         supportingFiles.add(new SupportingFile("requirements.mustache", "", "requirements.txt"));
 
-        supportingFiles.add(new SupportingFile("configuration.mustache", swaggerFolder, "configuration.py"));
-        supportingFiles.add(new SupportingFile("__init__package.mustache", swaggerFolder, "__init__.py"));
-        supportingFiles.add(new SupportingFile("__init__model.mustache", modelPackage, "__init__.py"));
-        supportingFiles.add(new SupportingFile("__init__api.mustache", apiPackage, "__init__.py"));
+        supportingFiles.add(new SupportingFile("configuration.mustache", packageName, "configuration.py"));
+        supportingFiles.add(new SupportingFile("__init__package.mustache", packageName, "__init__.py"));
+        supportingFiles.add(new SupportingFile("__init__model.mustache", packageName + File.separatorChar + modelPackage, "__init__.py"));
+        supportingFiles.add(new SupportingFile("__init__api.mustache", packageName + File.separatorChar + apiPackage, "__init__.py"));
 
         if(Boolean.FALSE.equals(excludeTests)) {
             supportingFiles.add(new SupportingFile("__init__test.mustache", testFolder, "__init__.py"));
@@ -212,21 +214,40 @@ public class PythonClientCodegen extends DefaultCodegen implements CodegenConfig
         supportingFiles.add(new SupportingFile("gitignore.mustache", "", ".gitignore"));
         supportingFiles.add(new SupportingFile("travis.mustache", "", ".travis.yml"));
         supportingFiles.add(new SupportingFile("setup.mustache", "", "setup.py"));
-        supportingFiles.add(new SupportingFile("api_client.mustache", swaggerFolder, "api_client.py"));
+        supportingFiles.add(new SupportingFile("api_client.mustache", packageName, "api_client.py"));
 
         if ("asyncio".equals(getLibrary())) {
-            supportingFiles.add(new SupportingFile("asyncio/rest.mustache", swaggerFolder, "rest.py"));
+            supportingFiles.add(new SupportingFile("asyncio/rest.mustache", packageName, "rest.py"));
             additionalProperties.put("asyncio", "true");
         } else if ("tornado".equals(getLibrary())) {
-            supportingFiles.add(new SupportingFile("tornado/rest.mustache", swaggerFolder, "rest.py"));
+            supportingFiles.add(new SupportingFile("tornado/rest.mustache", packageName, "rest.py"));
             additionalProperties.put("tornado", "true");
         } else {
-            supportingFiles.add(new SupportingFile("rest.mustache", swaggerFolder, "rest.py"));
+            supportingFiles.add(new SupportingFile("rest.mustache", packageName, "rest.py"));
         }
+
+        modelPackage = packageName + "." + modelPackage;
+        apiPackage = packageName + "." + apiPackage;
+
     }
 
     private static String dropDots(String str) {
         return str.replaceAll("\\.", "_");
+    }
+
+    @Override
+    public String toModelImport(String name) {
+        String modelImport;
+        if (StringUtils.startsWithAny(name,"import", "from")) {
+            modelImport = name;
+        } else {
+            modelImport = "from ";
+            if (!"".equals(modelPackage())) {
+                modelImport += modelPackage() + ".";
+            }
+            modelImport += toModelFilename(name)+ " import " + name;
+        }
+        return modelImport;
     }
 
     @Override
@@ -340,31 +361,28 @@ public class PythonClientCodegen extends DefaultCodegen implements CodegenConfig
     }
 
     @Override
-    public String getTypeDeclaration(Property p) {
-        if (p instanceof ArrayProperty) {
-            ArrayProperty ap = (ArrayProperty) p;
-            Property inner = ap.getItems();
-            return getSwaggerType(p) + "[" + getTypeDeclaration(inner) + "]";
-        } else if (p instanceof MapProperty) {
-            MapProperty mp = (MapProperty) p;
-            Property inner = mp.getAdditionalProperties();
-
-            return getSwaggerType(p) + "(str, " + getTypeDeclaration(inner) + ")";
+    public String getTypeDeclaration(Schema propertySchema) {
+        if (propertySchema instanceof ArraySchema) {
+            Schema inner = ((ArraySchema) propertySchema).getItems();
+            return String.format("%s[%s]", getSchemaType(propertySchema), getTypeDeclaration(inner));
+        } else if (propertySchema instanceof MapSchema && hasSchemaProperties(propertySchema)) {
+            Schema inner = (Schema) propertySchema.getAdditionalProperties();
+            return String.format("%s[str, %s]", getSchemaType(propertySchema), getTypeDeclaration(inner));
         }
-        return super.getTypeDeclaration(p);
+        return super.getTypeDeclaration(propertySchema);
     }
 
     @Override
-    public String getSwaggerType(Property p) {
-        String swaggerType = super.getSwaggerType(p);
+    public String getSchemaType(Schema propertySchema) {
+        String schemaType = super.getSchemaType(propertySchema);
         String type = null;
-        if (typeMapping.containsKey(swaggerType)) {
-            type = typeMapping.get(swaggerType);
+        if (typeMapping.containsKey(schemaType)) {
+            type = typeMapping.get(schemaType);
             if (languageSpecificPrimitives.contains(type)) {
                 return type;
             }
         } else {
-            type = toModelName(swaggerType);
+            type = toModelName(schemaType);
         }
         return type;
     }
@@ -555,53 +573,33 @@ public class PythonClientCodegen extends DefaultCodegen implements CodegenConfig
     /**
      * Return the default value of the property
      *
-     * @param p Swagger property object
+     * @param propertySchema Swagger property object
      * @return string presentation of the default value of the property
      */
     @Override
-    public String toDefaultValue(Property p) {
-        if (p instanceof StringProperty) {
-            StringProperty dp = (StringProperty) p;
-            if (dp.getDefault() != null) {
-                if (Pattern.compile("\r\n|\r|\n").matcher(dp.getDefault()).find())
-                    return "'''" + dp.getDefault() + "'''";
+    public String toDefaultValue(Schema propertySchema) {
+        if (propertySchema instanceof StringSchema) {
+            if (propertySchema.getDefault() != null) {
+                if (Pattern.compile("\r\n|\r|\n").matcher(propertySchema.getDefault().toString()).find())
+                    return "'''" + propertySchema.getDefault() + "'''";
                 else
-                    return "'" + dp.getDefault() + "'";
+                    return "'" + propertySchema.getDefault() + "'";
             }
-        } else if (p instanceof BooleanProperty) {
-            BooleanProperty dp = (BooleanProperty) p;
-            if (dp.getDefault() != null) {
-                if (dp.getDefault().toString().equalsIgnoreCase("false"))
+        } else if (propertySchema instanceof BooleanSchema) {
+            if (propertySchema.getDefault() != null) {
+                if (propertySchema.getDefault().toString().equalsIgnoreCase("false")) {
                     return "False";
-                else
+                } else {
                     return "True";
+                }
             }
-        } else if (p instanceof DateProperty) {
+        } else if (propertySchema instanceof DateSchema || propertySchema instanceof DateTimeSchema) {
             // TODO
-        } else if (p instanceof DateTimeProperty) {
-            // TODO
-        } else if (p instanceof DoubleProperty) {
-            DoubleProperty dp = (DoubleProperty) p;
-            if (dp.getDefault() != null) {
-                return dp.getDefault().toString();
-            }
-        } else if (p instanceof FloatProperty) {
-            FloatProperty dp = (FloatProperty) p;
-            if (dp.getDefault() != null) {
-                return dp.getDefault().toString();
-            }
-        } else if (p instanceof IntegerProperty) {
-            IntegerProperty dp = (IntegerProperty) p;
-            if (dp.getDefault() != null) {
-                return dp.getDefault().toString();
-            }
-        } else if (p instanceof LongProperty) {
-            LongProperty dp = (LongProperty) p;
-            if (dp.getDefault() != null) {
-                return dp.getDefault().toString();
-            }
+            return null;
         }
-
+        if (propertySchema.getDefault() != null) {
+            return propertySchema.getDefault().toString();
+        }
         return null;
     }
 
@@ -661,9 +659,9 @@ public class PythonClientCodegen extends DefaultCodegen implements CodegenConfig
 
         if (example == null) {
             example = "NULL";
-        } else if (Boolean.TRUE.equals(p.isListContainer)) {
+        } else if (getBooleanValue(p, CodegenConstants.IS_LIST_CONTAINER_EXT_NAME)) {
             example = "[" + example + "]";
-        } else if (Boolean.TRUE.equals(p.isMapContainer)) {
+        } else if (getBooleanValue(p, CodegenConstants.IS_MAP_CONTAINER_EXT_NAME)) {
             example = "{'key': " + example + "}";
         }
 

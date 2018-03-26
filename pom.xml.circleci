@@ -92,7 +92,7 @@
                     <lineEnding>LF</lineEnding>
                 </configuration>
             </plugin>
-            <plugin>
+            <!--<plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-checkstyle-plugin</artifactId>
                 <version>2.17</version>
@@ -102,7 +102,7 @@
                         <phase>validate</phase>
                         <configuration>
                             <configLocation>google_checkstyle.xml</configLocation>
-                            <!-- Don't include generated sources a la http://stackoverflow.com/a/30406454 -->
+                            Don't include generated sources a la http://stackoverflow.com/a/30406454
                             <sourceDirectory>${project.build.sourceDirectory}</sourceDirectory>
                             <encoding>UTF-8</encoding>
                             <consoleOutput>true</consoleOutput>
@@ -121,7 +121,7 @@
                         <version>6.19</version>
                     </dependency>
                 </dependencies>
-            </plugin>
+            </plugin>-->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
@@ -162,8 +162,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.6.1</version>
                 <configuration>
-                    <source>1.7</source>
-                    <target>1.7</target>
+                    <source>1.8</source>
+                    <target>1.8</target>
                 </configuration>
             </plugin>
             <plugin>
@@ -198,7 +198,7 @@
                 <version>2.10.4</version>
                 <configuration>
                     <aggregate>true</aggregate>
-                    <source>1.7</source>
+                    <source>1.8</source>
                     <encoding>UTF-8</encoding>
                     <maxmemory>1g</maxmemory>
                     <excludePackageNames>${javadoc.package.exclude}</excludePackageNames>
@@ -656,7 +656,7 @@
             </modules>
         </profile>
         <profile>
-            <id>typescript-angular-client</id>
+            <id>typescript-angularjs-client</id>
             <activation>
                 <property>
                     <name>env</name>
@@ -822,8 +822,10 @@
             <modules>
                 <!-- clients -->
                 <!-- test java-related projects -->
-                <module>samples/client/petstore/scala</module>
-                <module>samples/client/petstore/clojure</module>
+                <!--<module>samples/client/petstore/akka-scala</module>-->
+                <!--<module>samples/client/petstore/scala</module>-->
+                <!--<module>samples/client/petstore/scalaz</module>-->
+                <!--<module>samples/client/petstore/clojure</module>-->
                 <module>samples/client/petstore/java/feign</module>
                 <module>samples/client/petstore/java/jersey1</module>
                 <module>samples/client/petstore/java/jersey2</module>
@@ -831,38 +833,43 @@
                 <module>samples/client/petstore/java/retrofit</module>
                 <module>samples/client/petstore/java/retrofit2</module>
                 <module>samples/client/petstore/java/retrofit2rx</module>
-                <module>samples/client/petstore/jaxrs-cxf-client</module>
+                <!--<module>samples/client/petstore/jaxrs-cxf-client</module>-->
                 <module>samples/client/petstore/java/resttemplate</module>
                 <module>samples/client/petstore/java/resttemplate-withXml</module>
                 <module>samples/client/petstore/java/vertx</module>
                 <module>samples/client/petstore/java/resteasy</module>
-                <module>samples/client/petstore/kotlin/</module>
+                <module>samples/client/petstore/java/google-api-client</module>
+                <!--<module>samples/client/petstore/kotlin/</module>-->
                 <!-- test non-java projects -->
-                <module>samples/client/petstore/go</module>
-                <module>samples/client/petstore/ruby</module>
+                <!--<module>samples/client/petstore/go</module>-->
                 <!-- servers -->
+                <module>samples/server/petstore/java-vertx/rx</module>
+                <module>samples/server/petstore/java-vertx/async</module>
                 <module>samples/server/petstore/java-inflector</module>
-                <module>samples/server/petstore/java-play-framework</module>
-                <module>samples/server/petstore/undertow</module>
-                <module>samples/server/petstore/jaxrs/jersey1</module>
-                <module>samples/server/petstore/jaxrs/jersey2</module>
-                <module>samples/server/petstore/jaxrs/jersey1-useTags</module>
-                <module>samples/server/petstore/jaxrs/jersey2-useTags</module>
-                <module>samples/server/petstore/jaxrs-resteasy/default</module>
-                <module>samples/server/petstore/jaxrs-resteasy/eap</module>
-                <module>samples/server/petstore/jaxrs-resteasy/eap-joda</module>
-                <module>samples/server/petstore/jaxrs-resteasy/eap-java8</module>
-                <module>samples/server/petstore/jaxrs-resteasy/joda</module>
-                <module>samples/server/petstore/spring-mvc</module>
-                <module>samples/client/petstore/spring-cloud</module>
-                <module>samples/server/petstore/springboot</module>
-                <module>samples/server/petstore/springboot-beanvalidation</module>
-                <module>samples/server/petstore/springboot-useoptional</module>
-                <module>samples/server/petstore/jaxrs-cxf</module>
-                <module>samples/server/petstore/jaxrs-cxf-annotated-base-path</module>
-                <module>samples/server/petstore/jaxrs-cxf-cdi</module>
-                <module>samples/server/petstore/jaxrs-cxf-non-spring-app</module>
-                <module>samples/server/petstore/java-msf4j</module>
+                <!--<module>samples/server/petstore/java-pkmst</module>-->
+                <!--<module>samples/server/petstore/java-play-framework</module>-->
+                <!--<module>samples/server/petstore/undertow</module>-->
+                <!--<module>samples/server/petstore/jaxrs/jersey1</module>-->
+                <!--<module>samples/server/petstore/jaxrs/jersey2</module>-->
+                <!--<module>samples/server/petstore/jaxrs/jersey1-useTags</module>-->
+                <!--<module>samples/server/petstore/jaxrs/jersey2-useTags</module>-->
+                <!--<module>samples/server/petstore/jaxrs-resteasy/default</module>-->
+                <!--<module>samples/server/petstore/jaxrs-resteasy/eap</module>-->
+                <!--<module>samples/server/petstore/jaxrs-resteasy/eap-joda</module>-->
+                <!--<module>samples/server/petstore/jaxrs-resteasy/eap-java8</module>-->
+                <!--<module>samples/server/petstore/jaxrs-resteasy/joda</module>-->
+                <!--<module>samples/server/petstore/spring-mvc</module>-->
+                <!--<module>samples/client/petstore/spring-cloud</module>-->
+                <!--<module>samples/server/petstore/springboot</module>-->
+                <!--<module>samples/server/petstore/springboot-beanvalidation</module>-->
+                <!--<module>samples/server/petstore/springboot-useoptional</module>-->
+                <!--<module>samples/server/petstore/jaxrs-cxf</module>-->
+                <!--<module>samples/server/petstore/jaxrs-cxf-annotated-base-path</module>-->
+                <!--<module>samples/server/petstore/jaxrs-cxf-cdi</module>-->
+                <!--<module>samples/server/petstore/jaxrs-cxf-non-spring-app</module>-->
+                <!--<module>samples/server/petstore/java-msf4j</module>-->
+                <!--<module>samples/server/petstore/jaxrs-spec-interface</module>-->
+                <!--<module>samples/server/petstore/scala-lagom-server</module>-->
             </modules>
         </profile>
     </profiles>
@@ -934,10 +941,10 @@
         </repository>
     </repositories>
     <properties>
-        <swagger-parser-version>1.0.31</swagger-parser-version>
+        <swagger-parser-version>2.0.0-SNAPSHOT</swagger-parser-version>
         <scala-version>2.11.1</scala-version>
         <felix-version>3.3.0</felix-version>
-        <swagger-core-version>1.5.15</swagger-core-version>
+        <swagger-core-version>2.0.0-SNAPSHOT</swagger-core-version>
         <commons-io-version>2.4</commons-io-version>
         <commons-cli-version>1.2</commons-cli-version>
         <junit-version>4.8.1</junit-version>

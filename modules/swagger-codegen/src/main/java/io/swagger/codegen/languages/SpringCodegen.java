@@ -2,52 +2,74 @@ package io.swagger.codegen.languages;
 
 import com.samskivert.mustache.Mustache;
 import com.samskivert.mustache.Template;
-import io.swagger.codegen.*;
+import io.swagger.codegen.CliOption;
+import io.swagger.codegen.CodegenConstants;
+import io.swagger.codegen.CodegenModel;
+import io.swagger.codegen.CodegenOperation;
+import io.swagger.codegen.CodegenParameter;
+import io.swagger.codegen.CodegenProperty;
+import io.swagger.codegen.CodegenResponse;
+import io.swagger.codegen.CodegenSecurity;
+import io.swagger.codegen.CodegenType;
+import io.swagger.codegen.SupportingFile;
 import io.swagger.codegen.languages.features.BeanValidationFeatures;
 import io.swagger.codegen.languages.features.OptionalFeatures;
-import io.swagger.models.Operation;
-import io.swagger.models.Path;
-import io.swagger.models.Swagger;
+import io.swagger.codegen.utils.ModelUtils;
+import io.swagger.codegen.utils.URLPathUtil;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.Operation;
+import io.swagger.v3.oas.models.PathItem;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.Writer;
-import java.util.*;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 
-public class SpringCodegen extends AbstractJavaCodegen implements BeanValidationFeatures, OptionalFeatures {
-    public static final String DEFAULT_LIBRARY        = "spring-boot";
-    public static final String TITLE                  = "title";
-    public static final String CONFIG_PACKAGE         = "configPackage";
-    public static final String BASE_PACKAGE           = "basePackage";
-    public static final String INTERFACE_ONLY         = "interfaceOnly";
-    public static final String DELEGATE_PATTERN       = "delegatePattern";
-    public static final String SINGLE_CONTENT_TYPES   = "singleContentTypes";
-    public static final String JAVA_8                 = "java8";
-    public static final String ASYNC                  = "async";
-    public static final String RESPONSE_WRAPPER       = "responseWrapper";
-    public static final String USE_TAGS               = "useTags";
-    public static final String SPRING_MVC_LIBRARY     = "spring-mvc";
-    public static final String SPRING_CLOUD_LIBRARY   = "spring-cloud";
-    public static final String SPRING_WEBFLUX_LIBRARY = "spring-boot-webflux";
-    public static final String IMPLICIT_HEADERS       = "implicitHeaders";
-    public static final String SWAGGER_DOCKET_CONFIG  = "swaggerDocketConfig";
+import static io.swagger.codegen.CodegenConstants.HAS_ENUMS_EXT_NAME;
+import static io.swagger.codegen.CodegenConstants.IS_ENUM_EXT_NAME;
+import static io.swagger.codegen.languages.helpers.ExtensionHelper.getBooleanValue;
 
-    protected String           gradleWrapperPackage   = "gradle.wrapper";
-    protected String           title                  = "swagger-petstore";
-    protected String           configPackage          = "io.swagger.configuration";
-    protected String           basePackage            = "io.swagger";
-    protected boolean          interfaceOnly          = false;
-    protected boolean          delegatePattern        = false;
-    protected boolean          singleContentTypes     = false;
-    protected boolean          java8                  = false;
-    protected boolean          async                  = false;
-    protected String           responseWrapper        = "";
-    protected boolean          useTags                = false;
-    protected boolean          useBeanValidation      = true;
-    protected boolean          implicitHeaders        = false;
-    protected boolean          swaggerDocketConfig    = false;
-    protected boolean          useOptional            = false;
+public class SpringCodegen extends AbstractJavaCodegen
+        implements BeanValidationFeatures, OptionalFeatures {
+    public static final String DEFAULT_LIBRARY = "spring-boot";
+    public static final String TITLE = "title";
+    public static final String CONFIG_PACKAGE = "configPackage";
+    public static final String BASE_PACKAGE = "basePackage";
+    public static final String INTERFACE_ONLY = "interfaceOnly";
+    public static final String DELEGATE_PATTERN = "delegatePattern";
+    public static final String SINGLE_CONTENT_TYPES = "singleContentTypes";
+    public static final String JAVA_8 = "java8";
+    public static final String ASYNC = "async";
+    public static final String RESPONSE_WRAPPER = "responseWrapper";
+    public static final String USE_TAGS = "useTags";
+    public static final String SPRING_MVC_LIBRARY = "spring-mvc";
+    public static final String SPRING_CLOUD_LIBRARY = "spring-cloud";
+	public static final String	SPRING_WEBFLUX_LIBRARY	= "spring-boot-webflux";
+    public static final String IMPLICIT_HEADERS = "implicitHeaders";
+    public static final String SWAGGER_DOCKET_CONFIG = "swaggerDocketConfig";
+
+	protected String	 gradleWrapperPackage	= "gradle.wrapper";
+    protected String title = "swagger-petstore";
+    protected String configPackage = "io.swagger.configuration";
+    protected String basePackage = "io.swagger";
+    protected boolean interfaceOnly = false;
+    protected boolean delegatePattern = false;
+    protected boolean delegateMethod = false;
+    protected boolean singleContentTypes = false;
+    protected boolean java8 = false;
+    protected boolean async = false;
+    protected String responseWrapper = "";
+    protected boolean useTags = false;
+    protected boolean useBeanValidation = true;
+    protected boolean implicitHeaders = false;
+    protected boolean swaggerDocketConfig = false;
+    protected boolean useOptional = false;
 
     public SpringCodegen() {
         super();
@@ -207,7 +229,14 @@ public class SpringCodegen extends AbstractJavaCodegen implements BeanValidation
         }
 
         if (this.interfaceOnly && this.delegatePattern) {
-            throw new IllegalArgumentException(String.format("Can not generate code with `%s` and `%s` both true.", DELEGATE_PATTERN, INTERFACE_ONLY));
+            if (this.java8) {
+                this.delegateMethod = true;
+                additionalProperties.put("delegate-method", true);
+            } else {
+                throw new IllegalArgumentException(
+                        String.format("Can not generate code with `%s` and `%s` true while `%s` is false.",
+                                DELEGATE_PATTERN, INTERFACE_ONLY, JAVA_8));
+            }
         }
 
         if (!this.interfaceOnly) {
@@ -247,8 +276,6 @@ public class SpringCodegen extends AbstractJavaCodegen implements BeanValidation
                     additionalProperties.put(SINGLE_CONTENT_TYPES, "true");
                     this.setSingleContentTypes(true);
                 }
-                additionalProperties.put("useSpringCloudClient", true);
-
             } else {
                 apiTemplateFiles.put("apiController.mustache", "Controller.java");
                 supportingFiles.add(new SupportingFile("apiException.mustache", (sourceFolder + File.separator + apiPackage).replace(".", java.io.File.separator), "ApiException.java"));
@@ -269,12 +296,13 @@ public class SpringCodegen extends AbstractJavaCodegen implements BeanValidation
                 supportingFiles.add(new SupportingFile("jacksonConfiguration.mustache", (sourceFolder + File.separator + configPackage).replace(".", java.io.File.separator), "JacksonConfiguration.java"));
             }
         }
-
-        if (!this.delegatePattern && this.java8) {
+        
+        if ((!this.delegatePattern && this.java8) || this.delegateMethod) {
             additionalProperties.put("jdk8-no-delegate", true);
         }
 
-        if (this.delegatePattern) {
+
+        if (this.delegatePattern && !this.delegateMethod) {
             additionalProperties.put("isDelegate", "true");
             apiTemplateFiles.put("apiDelegate.mustache", "Delegate.java");
         }
@@ -364,15 +392,12 @@ public class SpringCodegen extends AbstractJavaCodegen implements BeanValidation
     }
 
     @Override
-    public void preprocessSwagger(Swagger swagger) {
-        super.preprocessSwagger(swagger);
-        if ("/".equals(swagger.getBasePath())) {
-            swagger.setBasePath("");
-        }
+    public void preprocessOpenAPI(OpenAPI openAPI) {
+        super.preprocessOpenAPI(openAPI);
 
         if (!additionalProperties.containsKey(TITLE)) {
             // From the title, compute a reasonable name for the package and the API
-            String title = swagger.getInfo().getTitle();
+            String title = openAPI.getInfo().getTitle();
 
             // Drop any API suffix
             if (title != null) {
@@ -386,38 +411,34 @@ public class SpringCodegen extends AbstractJavaCodegen implements BeanValidation
             additionalProperties.put(TITLE, this.title);
         }
 
-        String host = swagger.getHost();
-        String port = "8080";
-        if (host != null) {
-            String[] parts = host.split(":");
-            if (parts.length > 1) {
-                port = parts[1];
-            }
+        final URL urlInfo = URLPathUtil.getServerURL(openAPI);
+        String port = "8080"; // Default value for a JEE Server
+        if ( urlInfo != null && urlInfo.getPort() != 0) {
+            port = String.valueOf(urlInfo.getPort());
         }
 
         this.additionalProperties.put("serverPort", port);
-        if (swagger.getPaths() != null) {
-            for (String pathname : swagger.getPaths().keySet()) {
-                Path path = swagger.getPath(pathname);
-                if (path.getOperations() != null) {
-                    for (Operation operation : path.getOperations()) {
-                        if (operation.getTags() != null) {
-                            List<Map<String, String>> tags = new ArrayList<Map<String, String>>();
-                            for (String tag : operation.getTags()) {
-                                Map<String, String> value = new HashMap<String, String>();
-                                value.put("tag", tag);
-                                value.put("hasMore", "true");
-                                tags.add(value);
-                            }
-                            if (tags.size() > 0) {
-                                tags.get(tags.size() - 1).remove("hasMore");
-                            }
-                            if (operation.getTags().size() > 0) {
-                                String tag = operation.getTags().get(0);
-                                operation.setTags(Arrays.asList(tag));
-                            }
-                            operation.setVendorExtension("x-tags", tags);
+        if (openAPI.getPaths() != null) {
+            for (String pathname : openAPI.getPaths().keySet()) {
+                PathItem pathItem = openAPI.getPaths().get(pathname);
+                final Operation[] operations = ModelUtils.createOperationArray(pathItem);
+                for (Operation operation : operations) {
+                    if (operation.getTags() != null) {
+                        List<Map<String, String>> tags = new ArrayList<Map<String, String>>();
+                        for (String tag : operation.getTags()) {
+                            Map<String, String> value = new HashMap<String, String>();
+                            value.put("tag", tag);
+                            value.put("hasMore", "true");
+                            tags.add(value);
                         }
+                        if (tags.size() > 0) {
+                            tags.get(tags.size() - 1).remove("hasMore");
+                        }
+                        if (operation.getTags().size() > 0) {
+                            String tag = operation.getTags().get(0);
+                            operation.setTags(Arrays.asList(tag));
+                        }
+                        operation.addExtension("x-tags", tags);
                     }
                 }
             }
@@ -525,12 +546,12 @@ public class SpringCodegen extends AbstractJavaCodegen implements BeanValidation
         final ArrayList<CodegenParameter> copy = new ArrayList<>(allParams);
         allParams.clear();
 
-        for (CodegenParameter p : copy) {
-            if (!p.isHeaderParam) {
+        for(CodegenParameter p : copy){
+            if(!getBooleanValue(p, CodegenConstants.IS_HEADER_PARAM_EXT_NAME)){
                 allParams.add(p);
             }
         }
-        allParams.get(allParams.size() - 1).hasMore = false;
+        allParams.get(allParams.size()-1).getVendorExtensions().put(CodegenConstants.HAS_MORE_EXT_NAME, Boolean.FALSE);
     }
 
     @Override
@@ -637,11 +658,12 @@ public class SpringCodegen extends AbstractJavaCodegen implements BeanValidation
             property.example = null;
         }
 
-        // Add imports for Jackson
-        if (!Boolean.TRUE.equals(model.isEnum)) {
+        //Add imports for Jackson
+        boolean isEnum = getBooleanValue(model, IS_ENUM_EXT_NAME);
+        if (!Boolean.TRUE.equals(isEnum)) {
             model.imports.add("JsonProperty");
-
-            if (Boolean.TRUE.equals(model.hasEnums)) {
+            boolean hasEnums = getBooleanValue(model, HAS_ENUMS_EXT_NAME);
+            if (Boolean.TRUE.equals(hasEnums)) {
                 model.imports.add("JsonValue");
             }
         } else { // enum class
@@ -663,7 +685,8 @@ public class SpringCodegen extends AbstractJavaCodegen implements BeanValidation
             Map<String, Object> mo = (Map<String, Object>) _mo;
             CodegenModel cm = (CodegenModel) mo.get("model");
             // for enum model
-            if (Boolean.TRUE.equals(cm.isEnum) && cm.allowableValues != null) {
+            boolean isEnum = getBooleanValue(cm, IS_ENUM_EXT_NAME);
+            if (Boolean.TRUE.equals(isEnum) && cm.allowableValues != null) {
                 cm.imports.add(importMapping.get("JsonValue"));
                 Map<String, String> item = new HashMap<String, String>();
                 item.put("import", importMapping.get("JsonValue"));
